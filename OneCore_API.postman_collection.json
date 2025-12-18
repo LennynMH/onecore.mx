@@ -1,0 +1,338 @@
+{
+	"info": {
+		"_postman_id": "onecore-api-collection",
+		"name": "OneCore API",
+		"description": "Colección de APIs para OneCore - FastAPI Application\n\nIncluye:\n- Autenticación JWT\n- Carga de archivos CSV\n- Validación de datos\n- Integración con AWS S3 y SQL Server",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "onecore-api"
+	},
+	"item": [
+		{
+			"name": "Health & Info",
+			"item": [
+				{
+					"name": "Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/health",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"health"
+							]
+						},
+						"description": "Verifica el estado de la aplicación"
+					},
+					"response": []
+				},
+				{
+					"name": "Root Endpoint",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								""
+							]
+						},
+						"description": "Información general de la API"
+					},
+					"response": []
+				}
+			],
+			"description": "Endpoints públicos sin autenticación"
+		},
+		{
+			"name": "Authentication",
+			"item": [
+				{
+					"name": "Login (Anonymous)",
+					"item": [
+						{
+							"name": "Login - Sin rol (default gestor)",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"if (pm.response.code === 200) {",
+											"    var jsonData = pm.response.json();",
+											"    pm.environment.set(\"access_token\", jsonData.access_token);",
+											"    console.log(\"Token guardado: \" + jsonData.access_token);",
+											"    console.log(\"Usuario: \" + JSON.stringify(jsonData.user));",
+											"}"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/v1/auth/login",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"auth",
+										"login"
+									]
+								},
+								"description": "Login sin especificar rol. Por defecto se asigna el rol \"gestor\".\n\nEl body puede ser `{}` o `null`."
+							},
+							"response": []
+						},
+						{
+							"name": "Login - Con rol admin",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"if (pm.response.code === 200) {",
+											"    var jsonData = pm.response.json();",
+											"    pm.environment.set(\"access_token\", jsonData.access_token);",
+											"    console.log(\"Token guardado: \" + jsonData.access_token);",
+											"    console.log(\"Usuario: \" + JSON.stringify(jsonData.user));",
+											"}"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"rol\": \"admin\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/v1/auth/login",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"auth",
+										"login"
+									]
+								},
+								"description": "Login con rol \"admin\".\n\nAsigna una sesión anónima con permisos de administrador."
+							},
+							"response": []
+						},
+						{
+							"name": "Login - Con rol gestor",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"if (pm.response.code === 200) {",
+											"    var jsonData = pm.response.json();",
+											"    pm.environment.set(\"access_token\", jsonData.access_token);",
+											"    console.log(\"Token guardado: \" + jsonData.access_token);",
+											"    console.log(\"Usuario: \" + JSON.stringify(jsonData.user));",
+											"}"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"rol\": \"gestor\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/v1/auth/login",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"auth",
+										"login"
+									]
+								},
+								"description": "Login con rol \"gestor\" (explícito).\n\nEquivalente a no enviar el parámetro rol, pero de forma explícita."
+							},
+							"response": []
+						}
+					],
+					"description": "Inicio de sesión para usuarios anónimos.\n\n**Parámetros (opcionales):**\n- `rol`: Rol del usuario (\"admin\" o \"gestor\"). Si no se proporciona, por defecto es \"gestor\"\n- El body es completamente opcional (puede enviarse `null` o `{}`)\n\n**Funcionalidad:**\n- Crea o reutiliza una sesión anónima desde la base de datos\n- Asigna el rol especificado o \"gestor\" por defecto\n- Devuelve un JWT token con:\n  - `id_usuario`: ID de la sesión anónima desde la base de datos\n  - `rol`: Rol asignado (\"admin\" o \"gestor\")\n  - Expiración: 15 minutos\n\n**Nota:** El token se guarda automáticamente en la variable de entorno 'access_token'"
+				},
+				{
+					"name": "Renew Token",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/renew",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"renew"
+							]
+						},
+						"description": "Renueva un JWT token existente.\n\nRequisitos:\n- El token original no debe haber expirado\n- Debe enviarse en el header Authorization\n\nGenera un nuevo token con tiempo de expiración adicional (30 minutos por defecto)"
+					},
+					"response": []
+				}
+			],
+			"description": "Endpoints de autenticación JWT"
+		},
+		{
+			"name": "File Upload",
+			"item": [
+				{
+					"name": "Upload CSV File",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": [],
+									"description": "Archivo CSV a subir"
+								},
+								{
+									"key": "param1",
+									"value": "value1",
+									"type": "text",
+									"description": "Primer parámetro adicional"
+								},
+								{
+									"key": "param2",
+									"value": "value2",
+									"type": "text",
+									"description": "Segundo parámetro adicional"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/files/upload",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"files",
+								"upload"
+							]
+						},
+						"description": "Sube un archivo CSV con validación.\n\n**Requisitos:**\n- Autenticación JWT requerida\n- Rol requerido: admin (configurable)\n- Archivo debe ser CSV\n- Dos parámetros adicionales obligatorios\n\n**Funcionalidades:**\n- ✅ Subida a AWS S3\n- ✅ Almacenamiento en SQL Server\n- ✅ Validación de archivo (valores vacíos, tipos incorrectos, duplicados)\n- ✅ Control de acceso por rol\n\n**Respuesta incluye:**\n- Estado de éxito/error\n- Nombre del archivo\n- Clave S3\n- Filas procesadas\n- Errores de validación\n- Parámetros enviados"
+					},
+					"response": []
+				}
+			],
+			"description": "Endpoints para carga y validación de archivos CSV"
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8000",
+			"type": "string"
+		},
+		{
+			"key": "access_token",
+			"value": "",
+			"type": "string"
+		}
+	]
+}
+

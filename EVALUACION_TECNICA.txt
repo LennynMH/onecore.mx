@@ -1,0 +1,79 @@
+EVALUACIÓN TÉCNICA: Desarrollo de Aplicación Web con Python y APIs
+one core
+VIRTUAL CORE S.A DE C.V
+
+================================================================================
+OBJETIVO
+================================================================================
+
+Evaluar las habilidades de desarrollo en Python, incluyendo la creación de APIs 
+REST, la integración con herramientas de IA y el manejo de datos en AWS y bases 
+de datos SQL.
+
+================================================================================
+INSTRUCCIONES PARA EL DESARROLLADOR
+================================================================================
+
+1. Desarrolla una aplicación web en Python utilizando FastAPI o Flask.
+
+2. Implementa APIs que cumplan con los requerimientos indicados, asegurando 
+   una arquitectura modular y limpia.
+
+3. Incluye integración con herramientas de IA para optimizar y enriquecer el 
+   proyecto.
+
+4. Realiza el control de versiones en GitHub con commits claros y documentados, 
+   incluyendo los cambios realizados con IA.
+
+================================================================================
+REQUERIMIENTOS DEL TEST
+================================================================================
+
+PARTE 1: APIs
+
+--------------------------------------------------------------------------------
+1. API DE INICIO DE SESIÓN (Session Login API)
+--------------------------------------------------------------------------------
+
+Implementa un endpoint que permita a usuarios anónimos iniciar sesión.
+
+Devuelve un JWT al usuario, firmado y con la siguiente información:
+- id_usuario (user_id)
+- rol (role)
+- Tiempo de expiración de 15 minutos.
+
+--------------------------------------------------------------------------------
+2. API DE CARGA Y VALIDACIÓN DE ARCHIVOS (File Upload and Validation API)
+--------------------------------------------------------------------------------
+
+Endpoint para subir un archivo CSV junto con dos parámetros adicionales.
+
+REQUISITOS DEL ENDPOINT:
+
+a) Subida a AWS S3:
+   - El archivo debe almacenarse en un bucket configurado.
+
+b) Almacenamiento en SQL Server:
+   - El contenido del archivo debe procesarse y guardarse en la base de datos.
+
+c) Validación:
+   - Devuelve una lista con las validaciones aplicadas al archivo (por ejemplo, 
+     valores vacíos, tipos incorrectos, o duplicados).
+
+d) Control de acceso:
+   - El acceso debe estar limitado a usuarios con rol específico, validando el 
+     token JWT.
+
+--------------------------------------------------------------------------------
+3. API DE RENOVACIÓN DE TOKEN (Token Renewal API)
+--------------------------------------------------------------------------------
+
+Implementa un endpoint para renovar el JWT, generando un nuevo token con un 
+tiempo de expiración adicional.
+
+Solo puede ser accedido si el token original aún no ha expirado.
+
+================================================================================
+FIN DEL DOCUMENTO
+================================================================================
+

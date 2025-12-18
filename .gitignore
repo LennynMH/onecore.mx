@@ -1,0 +1,308 @@
+# =====================================================
+# OneCore.mx - Git Ignore File
+# =====================================================
+
+# =====================================================
+# Python / FastAPI
+# =====================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv
+env.bak/
+venv.bak/
+
+# PyCharm
+.idea/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pytest
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# =====================================================
+# Node.js / React / Frontend
+# =====================================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Build outputs
+dist/
+dist-ssr/
+build/
+*.local
+
+# Vite
+.vite/
+
+# TypeScript
+*.tsbuildinfo
+
+# =====================================================
+# Environment Variables
+# =====================================================
+.env
+.env.local
+.env.development
+.env.development.local
+.env.production
+.env.production.local
+.env.test
+.env.*.local
+
+# =====================================================
+# Docker
+# =====================================================
+docker-compose.override.yml
+.dockerignore
+
+# =====================================================
+# IDEs and Editors
+# =====================================================
+# VSCode
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# JetBrains IDEs
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+.vim/
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# =====================================================
+# Operating System Files
+# =====================================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# =====================================================
+# Logs
+# =====================================================
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+*.log.*
+
+# =====================================================
+# Database
+# =====================================================
+*.db
+*.sqlite
+*.sqlite3
+*.db-shm
+*.db-wal
+
+# SQL Server backups
+*.bak
+*.trn
+
+# PostgreSQL
+*.sql.backup
+
+# =====================================================
+# AWS / Cloud Services
+# =====================================================
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+.aws/
+.aws-sam/
+
+# =====================================================
+# Testing
+# =====================================================
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.tox/
+.hypothesis/
+*.cover
+*.py,cover
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+
+# =====================================================
+# Temporary Files
+# =====================================================
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*~
+.cache/
+
+# =====================================================
+# Uploads and User Data
+# =====================================================
+uploads/
+temp/
+tmp/
+*.csv
+!test_validation_data.csv
+!test_validation_data_2.csv
+!test_validation_errors.csv
+
+# =====================================================
+# Documentation Build
+# =====================================================
+docs/_build/
+site/
+
+# =====================================================
+# Misc
+# =====================================================
+*.orig
+*.rej
+.sass-cache/
+.connect.lock
+.eslintcache
+.stylelintcache
+.nyc_output
+.grunt
+.lock-wscript
+.wafpickle-*
+*.pyc
+*.pyo
+*.pyd
+.installed.cfg
+*.egg
+*.egg-info/
+*.manifest
+*.spec
+pip-log.txt
+pip-delete-this-directory.txt
+.hypothesis/
+.pytest_cache/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+cython_debug/
+
+# =====================================================
+# Project Specific
+# =====================================================
+# Archivos de datos de prueba (mantener en repo)
+# test_validation_data.csv
+# test_validation_data_2.csv
+# test_validation_errors.csv
+
+# Archivos de configuración local
+config.local.json
+settings.local.json
+

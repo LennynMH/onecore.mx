@@ -1,0 +1,11 @@
+name,email,age,city,birthdate
+John Doe,john.doe@example.com,30,New York,1990-01-15
+Jane Smith,,25,Los Angeles,1995-05-20
+Bob Johnson,invalid-email-format,35,Chicago,2000-12-31
+Alice Williams,alice@example.com,not-a-number,Houston,1992-03-10
+Charlie Brown,charlie@example.com,28,Boston,invalid-date-format
+David Lee,david@example.com,42,Seattle,1980-07-22
+John Doe,john.doe@example.com,30,New York,1990-01-15
+Emma Wilson,emma@example.com,,Miami,1998-09-05
+Frank Miller,frank@example.com,abc,Denver,1991-11-18
+
