@@ -16,7 +16,6 @@ from app.core.middleware import (
     AuthMiddleware,
 )
 from app.interfaces.api.routers import create_api_router
-from app.interfaces.api.controllers.health_controller import router as health_router
 
 
 class ApplicationManager(LoggerMixin):
@@ -78,11 +77,12 @@ class ApplicationManager(LoggerMixin):
         # Add custom middleware
         app.middleware("http")(request_logging_middleware)
         
-        # Include API routers
+        # Include API router (contiene todos los endpoints)
         api_router = create_api_router()
         app.include_router(api_router)
         
-        # Include health controller
+        # Include health router (sin prefijo /api/v1, está en la raíz)
+        from app.interfaces.api.routers.health_router import router as health_router
         app.include_router(health_router)
         
         # Add exception handlers
