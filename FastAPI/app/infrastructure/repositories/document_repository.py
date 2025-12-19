@@ -207,82 +207,81 @@ class DocumentRepositoryImpl(DocumentRepository):
         """
         try:
             with self.db_helper.get_connection() as (conn, cursor):
-            
-            # Build WHERE clause
-            conditions = []
-            params = []
-            
-            if user_id:
-                conditions.append("uploaded_by = ?")
-                params.append(user_id)
-            
-            if classification:
-                conditions.append("classification = ?")
-                params.append(classification)
-            
-            if date_from:
-                conditions.append("uploaded_at >= ?")
-                params.append(date_from)
-            
-            if date_to:
-                conditions.append("uploaded_at <= ?")
-                params.append(date_to)
-            
-            where_clause = " AND ".join(conditions) if conditions else "1=1"
-            
-            # Get total count
-            cursor.execute(f"""
-                SELECT COUNT(*) FROM documents WHERE {where_clause}
-            """, params)
-            total = cursor.fetchone()[0]
-            
-            # Get paginated results
-            offset = (page - 1) * limit
-            cursor.execute(f"""
-                SELECT id, filename, original_filename, file_type, s3_key, s3_bucket,
-                       classification, uploaded_by, uploaded_at, processed_at, file_size
-                FROM documents
-                WHERE {where_clause}
-                ORDER BY uploaded_at DESC
-                OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
-            """, params + [offset, limit])
-            
-            documents = []
-            for row in cursor.fetchall():
-                document_id = row[0]
+                # Build WHERE clause
+                conditions = []
+                params = []
                 
-                # Get extracted data if exists
-                cursor.execute("""
-                    SELECT data_type, extracted_data
-                    FROM document_extracted_data
-                    WHERE document_id = ?
-                    ORDER BY created_at DESC
-                """, (document_id,))
+                if user_id:
+                    conditions.append("uploaded_by = ?")
+                    params.append(user_id)
                 
-                extracted_data = None
-                extracted_row = cursor.fetchone()
-                if extracted_row:
-                    try:
-                        extracted_data = json.loads(extracted_row[1])
-                    except (json.JSONDecodeError, TypeError) as e:
-                        logger.warning(f"Error parsing extracted_data for document {document_id}: {str(e)}")
-                        extracted_data = None
+                if classification:
+                    conditions.append("classification = ?")
+                    params.append(classification)
                 
-                documents.append(Document(
-                    id=document_id,
-                    filename=row[1],
-                    original_filename=row[2],
-                    file_type=row[3],
-                    s3_key=row[4],
-                    s3_bucket=row[5],
-                    classification=row[6],
-                    uploaded_by=row[7],
-                    uploaded_at=row[8],
-                    processed_at=row[9],
-                    file_size=row[10],
-                    extracted_data=extracted_data
-                ))
-            
+                if date_from:
+                    conditions.append("uploaded_at >= ?")
+                    params.append(date_from)
+                
+                if date_to:
+                    conditions.append("uploaded_at <= ?")
+                    params.append(date_to)
+                
+                where_clause = " AND ".join(conditions) if conditions else "1=1"
+                
+                # Get total count
+                cursor.execute(f"""
+                    SELECT COUNT(*) FROM documents WHERE {where_clause}
+                """, params)
+                total = cursor.fetchone()[0]
+                
+                # Get paginated results
+                offset = (page - 1) * limit
+                cursor.execute(f"""
+                    SELECT id, filename, original_filename, file_type, s3_key, s3_bucket,
+                           classification, uploaded_by, uploaded_at, processed_at, file_size
+                    FROM documents
+                    WHERE {where_clause}
+                    ORDER BY uploaded_at DESC
+                    OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
+                """, params + [offset, limit])
+                
+                documents = []
+                for row in cursor.fetchall():
+                    document_id = row[0]
+                    
+                    # Get extracted data if exists
+                    cursor.execute("""
+                        SELECT data_type, extracted_data
+                        FROM document_extracted_data
+                        WHERE document_id = ?
+                        ORDER BY created_at DESC
+                    """, (document_id,))
+                    
+                    extracted_data = None
+                    extracted_row = cursor.fetchone()
+                    if extracted_row:
+                        try:
+                            extracted_data = json.loads(extracted_row[1])
+                        except (json.JSONDecodeError, TypeError) as e:
+                            logger.warning(f"Error parsing extracted_data for document {document_id}: {str(e)}")
+                            extracted_data = None
+                    
+                    documents.append(Document(
+                        id=document_id,
+                        filename=row[1],
+                        original_filename=row[2],
+                        file_type=row[3],
+                        s3_key=row[4],
+                        s3_bucket=row[5],
+                        classification=row[6],
+                        uploaded_by=row[7],
+                        uploaded_at=row[8],
+                        processed_at=row[9],
+                        file_size=row[10],
+                        extracted_data=extracted_data
+                    ))
+                
                 return {
                     "total": total,
                     "page": page,
@@ -406,90 +405,89 @@ class DocumentRepositoryImpl(DocumentRepository):
         """
         try:
             with self.db_helper.get_connection() as (conn, cursor):
-            
-            # Build WHERE clause
-            where_conditions = []
-            params = []
-            
-            if event_type:
-                where_conditions.append("e.event_type = ?")
-                params.append(event_type)
-            
-            if document_id:
-                where_conditions.append("e.document_id = ?")
-                params.append(document_id)
-            
-            if user_id:
-                where_conditions.append("e.user_id = ?")
-                params.append(user_id)
-            
-            if classification:
-                where_conditions.append("d.classification = ?")
-                params.append(classification)
-            
-            if date_from:
-                where_conditions.append("e.created_at >= ?")
-                params.append(date_from)
-            
-            if date_to:
-                where_conditions.append("e.created_at <= ?")
-                params.append(date_to)
-            
-            if description_search:
-                where_conditions.append("e.description LIKE ?")
-                params.append(f"%{description_search}%")
-            
-            where_clause = " AND ".join(where_conditions) if where_conditions else "1=1"
-            
-            # Count total
-            count_query = f"""
-                SELECT COUNT(*)
-                FROM log_events e
-                LEFT JOIN documents d ON e.document_id = d.id
-                WHERE {where_clause}
-            """
-            cursor.execute(count_query, params)
-            total = cursor.fetchone()[0]
-            
-            # Calculate pagination
-            total_pages = (total + page_size - 1) // page_size
-            offset = (page - 1) * page_size
-            
-            # Get events with document info
-            query = f"""
-                SELECT 
-                    e.id,
-                    e.event_type,
-                    e.description,
-                    e.document_id,
-                    d.filename as document_filename,
-                    d.classification as document_classification,
-                    e.user_id,
-                    e.created_at
-                FROM log_events e
-                LEFT JOIN documents d ON e.document_id = d.id
-                WHERE {where_clause}
-                ORDER BY e.created_at DESC
-                OFFSET ? ROWS
-                FETCH NEXT ? ROWS ONLY
-            """
-            
-            params_with_pagination = params + [offset, page_size]
-            cursor.execute(query, params_with_pagination)
-            
-            events = []
-            for row in cursor.fetchall():
-                events.append({
-                    "id": row[0],
-                    "event_type": row[1],
-                    "description": row[2],
-                    "document_id": row[3],
-                    "document_filename": row[4],
-                    "document_classification": row[5],
-                    "user_id": row[6],
-                    "created_at": row[7]
-                })
-            
+                # Build WHERE clause
+                where_conditions = []
+                params = []
+                
+                if event_type:
+                    where_conditions.append("e.event_type = ?")
+                    params.append(event_type)
+                
+                if document_id:
+                    where_conditions.append("e.document_id = ?")
+                    params.append(document_id)
+                
+                if user_id:
+                    where_conditions.append("e.user_id = ?")
+                    params.append(user_id)
+                
+                if classification:
+                    where_conditions.append("d.classification = ?")
+                    params.append(classification)
+                
+                if date_from:
+                    where_conditions.append("e.created_at >= ?")
+                    params.append(date_from)
+                
+                if date_to:
+                    where_conditions.append("e.created_at <= ?")
+                    params.append(date_to)
+                
+                if description_search:
+                    where_conditions.append("e.description LIKE ?")
+                    params.append(f"%{description_search}%")
+                
+                where_clause = " AND ".join(where_conditions) if where_conditions else "1=1"
+                
+                # Count total
+                count_query = f"""
+                    SELECT COUNT(*)
+                    FROM log_events e
+                    LEFT JOIN documents d ON e.document_id = d.id
+                    WHERE {where_clause}
+                """
+                cursor.execute(count_query, params)
+                total = cursor.fetchone()[0]
+                
+                # Calculate pagination
+                total_pages = (total + page_size - 1) // page_size
+                offset = (page - 1) * page_size
+                
+                # Get events with document info
+                query = f"""
+                    SELECT 
+                        e.id,
+                        e.event_type,
+                        e.description,
+                        e.document_id,
+                        d.filename as document_filename,
+                        d.classification as document_classification,
+                        e.user_id,
+                        e.created_at
+                    FROM log_events e
+                    LEFT JOIN documents d ON e.document_id = d.id
+                    WHERE {where_clause}
+                    ORDER BY e.created_at DESC
+                    OFFSET ? ROWS
+                    FETCH NEXT ? ROWS ONLY
+                """
+                
+                params_with_pagination = params + [offset, page_size]
+                cursor.execute(query, params_with_pagination)
+                
+                events = []
+                for row in cursor.fetchall():
+                    events.append({
+                        "id": row[0],
+                        "event_type": row[1],
+                        "description": row[2],
+                        "document_id": row[3],
+                        "document_filename": row[4],
+                        "document_classification": row[5],
+                        "user_id": row[6],
+                        "created_at": row[7]
+                    })
+                
                 return {
                     "total": total,
                     "page": page,

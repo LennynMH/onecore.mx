@@ -1,4 +1,15 @@
-"""Document upload controller."""
+"""
+Document upload controller.
+
+Refactorización con Auto (Claude/ChatGPT) - PARTE 3.1
+
+¿Qué hace este módulo?
+Maneja la lógica de carga, listado y consulta de documentos en los endpoints.
+Esta refactorización utiliza HTTPHelpers para mejorar la consistencia.
+
+¿Qué clases contiene?
+- DocumentController: Controlador para operaciones de documentos
+"""
 
 from fastapi import UploadFile, HTTPException, Query, status
 from typing import Optional
@@ -10,6 +21,7 @@ from app.interfaces.schemas.document_schema import (
 from app.application.use_cases.document_upload_use_cases import DocumentUploadUseCases
 from app.infrastructure.repositories.document_repository import DocumentRepositoryImpl
 from app.infrastructure.database.sql_server import SQLServerService
+from app.interfaces.api.helpers import HTTPHelpers
 
 
 class DocumentController:
@@ -60,17 +72,12 @@ class DocumentController:
         Raises:
             HTTPException: Si el archivo no es válido o hay un error en el proceso
         """
-        # Validate file type
-        valid_extensions = ['.pdf', '.jpg', '.jpeg', '.png']
-        file_extension = None
-        if file.filename:
-            file_extension = '.' + file.filename.split('.')[-1].lower()
-        
-        if not file_extension or file_extension not in valid_extensions:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="File must be a PDF, JPG, or PNG file"
-            )
+        # Validar tipo de archivo usando HTTPHelpers
+        HTTPHelpers.validate_file_extension(
+            file=file,
+            allowed_extensions=['.pdf', '.jpg', '.jpeg', '.png'],
+            error_message="File must be a PDF, JPG, or PNG file"
+        )
         
         try:
             result = await self.document_upload_use_case.upload_document(
@@ -79,14 +86,14 @@ class DocumentController:
             )
             return DocumentUploadResponse(**result)
         except ValueError as e:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=str(e)
+            raise HTTPHelpers.handle_controller_error(
+                error=e,
+                status_code=status.HTTP_400_BAD_REQUEST
             )
         except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error uploading document: {str(e)}"
+            raise HTTPHelpers.handle_controller_error(
+                error=e,
+                default_message=f"Error uploading document: {str(e)}"
             )
     
     async def list_documents(
@@ -156,9 +163,9 @@ class DocumentController:
                 documents=documents_response
             )
         except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error listing documents: {str(e)}"
+            raise HTTPHelpers.handle_controller_error(
+                error=e,
+                default_message=f"Error listing documents: {str(e)}"
             )
     
     async def get_document(
@@ -209,8 +216,8 @@ class DocumentController:
         except HTTPException:
             raise
         except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error getting document: {str(e)}"
+            raise HTTPHelpers.handle_controller_error(
+                error=e,
+                default_message=f"Error getting document: {str(e)}"
             )
 

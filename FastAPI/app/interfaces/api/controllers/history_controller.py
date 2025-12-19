@@ -1,4 +1,15 @@
-"""History controller."""
+"""
+History controller.
+
+Refactorización con Auto (Claude/ChatGPT) - PARTE 3.1
+
+¿Qué hace este módulo?
+Maneja la lógica de consulta y exportación del historial de eventos en los endpoints.
+Esta refactorización utiliza HTTPHelpers para mejorar la consistencia.
+
+¿Qué clases contiene?
+- HistoryController: Controlador para operaciones de historial
+"""
 
 from fastapi import HTTPException, status
 from fastapi.responses import StreamingResponse
@@ -6,6 +17,7 @@ from typing import Optional
 from datetime import datetime
 from app.interfaces.schemas.history_schema import HistoryResponse, EventResponse
 from app.application.use_cases.history_use_cases import HistoryUseCases
+from app.interfaces.api.helpers import HTTPHelpers
 
 
 class HistoryController:
@@ -106,9 +118,9 @@ class HistoryController:
             )
             
         except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error getting history: {str(e)}"
+            raise HTTPHelpers.handle_controller_error(
+                error=e,
+                default_message=f"Error getting history: {str(e)}"
             )
     
     async def export_history(
@@ -166,8 +178,8 @@ class HistoryController:
             )
             
         except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error exporting history: {str(e)}"
+            raise HTTPHelpers.handle_controller_error(
+                error=e,
+                default_message=f"Error exporting history: {str(e)}"
             )
 

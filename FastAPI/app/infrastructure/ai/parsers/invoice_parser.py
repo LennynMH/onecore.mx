@@ -68,8 +68,12 @@ class InvoiceParser:
             block_id = block.get('Id')
             if block_id:
                 blocks_map[block_id] = block
+                # Guardar relaciones si existen
                 if 'Relationships' in block:
                     relationships[block_id] = block['Relationships']
+                else:
+                    # Inicializar lista vacía para bloques sin relaciones
+                    relationships[block_id] = []
         
         # Encontrar pares KEY-VALUE y preservar orden
         for block in response['Blocks']:
@@ -134,7 +138,8 @@ class InvoiceParser:
         
         ¿Qué hace la función?
         Encuentra el bloque VALUE que está relacionado con un bloque KEY específico
-        en la respuesta de Textract.
+        en la respuesta de Textract. En Textract, el bloque KEY tiene una relación
+        de tipo 'VALUE' que apunta al bloque VALUE asociado.
         
         ¿Qué parámetros recibe y de qué tipo?
         - key_block (Dict[str, Any]): Bloque KEY de Textract
@@ -146,21 +151,19 @@ class InvoiceParser:
         """
         key_block_id = key_block.get('Id')
         
-        # Buscar en todos los bloques VALUE para encontrar el que tiene relación con este KEY
-        for block in blocks_map.values():
-            if block.get('BlockType') == 'KEY_VALUE_SET':
-                entity_types = block.get('EntityTypes', [])
-                if 'VALUE' in entity_types:
-                    # Verificar si este VALUE tiene relación con el KEY
-                    block_id = block.get('Id')
-                    if block_id in relationships:
-                        for rel in relationships[block_id]:
-                            if rel.get('Type') == 'VALUE':
-                                # Verificar si este VALUE está relacionado con nuestro KEY
-                                related_ids = rel.get('Ids', [])
-                                if key_block_id in related_ids:
-                                    # Este es el VALUE asociado al KEY
-                                    return InvoiceParser._get_text_from_block(block, blocks_map, relationships)
+        # En Textract, el bloque KEY tiene una relación de tipo 'VALUE' que apunta al bloque VALUE
+        if key_block_id in relationships:
+            for rel in relationships[key_block_id]:
+                if rel.get('Type') == 'VALUE':
+                    # Obtener el ID del bloque VALUE
+                    value_ids = rel.get('Ids', [])
+                    if value_ids:
+                        # Tomar el primer VALUE (normalmente hay solo uno)
+                        value_block_id = value_ids[0]
+                        value_block = blocks_map.get(value_block_id)
+                        if value_block:
+                            # Extraer el texto del bloque VALUE
+                            return InvoiceParser._get_text_from_block(value_block, blocks_map, relationships)
         
         return ""
     

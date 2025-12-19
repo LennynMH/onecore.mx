@@ -1,9 +1,20 @@
-"""File upload controller."""
+"""
+File upload controller.
 
-from fastapi import UploadFile, HTTPException, status
-from typing import Dict, Any
+Refactorización con Auto (Claude/ChatGPT) - PARTE 3.1
+
+¿Qué hace este módulo?
+Maneja la lógica de carga y validación de archivos CSV en los endpoints.
+Esta refactorización utiliza HTTPHelpers para mejorar la consistencia.
+
+¿Qué clases contiene?
+- FileController: Controlador para carga de archivos CSV
+"""
+
+from fastapi import UploadFile
 from app.application.use_cases.file_upload_use_cases import FileUploadUseCases
 from app.interfaces.schemas.file_schema import FileUploadResponse
+from app.interfaces.api.helpers import HTTPHelpers
 
 
 class FileController:
@@ -56,12 +67,12 @@ class FileController:
         Raises:
             HTTPException: Si el archivo no es CSV o hay un error en el proceso
         """
-        # Validate file type
-        if not file.filename.endswith('.csv'):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="File must be a CSV file"
-            )
+        # Validar tipo de archivo usando HTTPHelpers
+        HTTPHelpers.validate_file_extension(
+            file=file,
+            allowed_extensions=['.csv'],
+            error_message="File must be a CSV file"
+        )
         
         try:
             result = await self.file_upload_use_case.upload_and_validate_file(
@@ -72,8 +83,8 @@ class FileController:
             )
             return FileUploadResponse(**result)
         except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error uploading file: {str(e)}"
+            raise HTTPHelpers.handle_controller_error(
+                error=e,
+                default_message=f"Error uploading file: {str(e)}"
             )
 
