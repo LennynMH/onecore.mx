@@ -2,7 +2,7 @@
 
 import json
 import logging
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from datetime import datetime
 from app.domain.entities.document import Document, Event
 from app.domain.repositories.document_repository import DocumentRepository
@@ -297,6 +297,125 @@ class DocumentRepositoryImpl(DocumentRepository):
             if conn:
                 conn.rollback()
             raise Exception(f"Failed to save event: {str(e)}")
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
+    
+    async def list_events(
+        self,
+        event_type: Optional[str] = None,
+        document_id: Optional[int] = None,
+        user_id: Optional[int] = None,
+        classification: Optional[str] = None,
+        date_from: Optional[datetime] = None,
+        date_to: Optional[datetime] = None,
+        description_search: Optional[str] = None,
+        page: int = 1,
+        page_size: int = 50
+    ) -> Dict[str, Any]:
+        """List events with filters and pagination."""
+        conn = None
+        cursor = None
+        try:
+            conn = self.db_service.get_connection()
+            cursor = conn.cursor()
+            
+            # Build WHERE clause
+            where_conditions = []
+            params = []
+            
+            if event_type:
+                where_conditions.append("e.event_type = ?")
+                params.append(event_type)
+            
+            if document_id:
+                where_conditions.append("e.document_id = ?")
+                params.append(document_id)
+            
+            if user_id:
+                where_conditions.append("e.user_id = ?")
+                params.append(user_id)
+            
+            if classification:
+                where_conditions.append("d.classification = ?")
+                params.append(classification)
+            
+            if date_from:
+                where_conditions.append("e.created_at >= ?")
+                params.append(date_from)
+            
+            if date_to:
+                where_conditions.append("e.created_at <= ?")
+                params.append(date_to)
+            
+            if description_search:
+                where_conditions.append("e.description LIKE ?")
+                params.append(f"%{description_search}%")
+            
+            where_clause = " AND ".join(where_conditions) if where_conditions else "1=1"
+            
+            # Count total
+            count_query = f"""
+                SELECT COUNT(*)
+                FROM events e
+                LEFT JOIN documents d ON e.document_id = d.id
+                WHERE {where_clause}
+            """
+            cursor.execute(count_query, params)
+            total = cursor.fetchone()[0]
+            
+            # Calculate pagination
+            total_pages = (total + page_size - 1) // page_size
+            offset = (page - 1) * page_size
+            
+            # Get events with document info
+            query = f"""
+                SELECT 
+                    e.id,
+                    e.event_type,
+                    e.description,
+                    e.document_id,
+                    d.filename as document_filename,
+                    d.classification as document_classification,
+                    e.user_id,
+                    e.created_at
+                FROM events e
+                LEFT JOIN documents d ON e.document_id = d.id
+                WHERE {where_clause}
+                ORDER BY e.created_at DESC
+                OFFSET ? ROWS
+                FETCH NEXT ? ROWS ONLY
+            """
+            
+            params_with_pagination = params + [offset, page_size]
+            cursor.execute(query, params_with_pagination)
+            
+            events = []
+            for row in cursor.fetchall():
+                events.append({
+                    "id": row[0],
+                    "event_type": row[1],
+                    "description": row[2],
+                    "document_id": row[3],
+                    "document_filename": row[4],
+                    "document_classification": row[5],
+                    "user_id": row[6],
+                    "created_at": row[7]
+                })
+            
+            return {
+                "total": total,
+                "page": page,
+                "page_size": page_size,
+                "total_pages": total_pages,
+                "events": events
+            }
+            
+        except Exception as e:
+            logger.error(f"Error listing events: {str(e)}")
+            raise Exception(f"Failed to list events: {str(e)}")
         finally:
             if cursor:
                 cursor.close()

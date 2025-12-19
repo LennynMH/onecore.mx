@@ -48,6 +48,9 @@ export interface InvoiceData {
     precio_unitario?: string;
     total?: string;
   }>;
+  subtotal?: string;
+  iva?: string;
+  total?: string;  // Backend puede devolver 'total' o 'total_factura'
   total_factura?: string;
 }
 

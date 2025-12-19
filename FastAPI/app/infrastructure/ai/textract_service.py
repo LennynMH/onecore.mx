@@ -376,40 +376,130 @@ class TextractService:
         }
         
         try:
-            # Extract Key-Value pairs from FORMS
-            key_value_pairs = self._extract_key_value_pairs(response)
+            # Extract Key-Value pairs from FORMS (now returns ordered list)
+            key_value_pairs_list = self._extract_key_value_pairs(response)
+            logger.info(f"Extracted {len(key_value_pairs_list)} key-value pairs")
             
             # Extract tables for products
             tables = self._extract_tables(response)
             
-            # Parse key-value pairs
-            for key, value in key_value_pairs.items():
+            # Track which fields we've already assigned to avoid duplicates
+            cliente_nombre_assigned = False
+            cliente_direccion_assigned = False
+            cliente_rfc_assigned = False
+            proveedor_nombre_assigned = False
+            proveedor_direccion_assigned = False
+            proveedor_rfc_assigned = False
+            
+            # Track if we've seen "DATOS DEL CLIENTE" or "DATOS DEL PROVEEDOR" sections
+            in_cliente_section = False
+            in_proveedor_section = False
+            
+            # Parse key-value pairs in order (top to bottom)
+            for kv_pair in key_value_pairs_list:
+                key = kv_pair['key']
+                value_str = str(kv_pair['value']).strip()
+                original_key = kv_pair.get('original_key', key)
                 key_lower = key.lower()
-                value_str = str(value).strip()
                 
-                # Cliente
-                if any(kw in key_lower for kw in ['cliente', 'client', 'customer', 'comprador']):
+                # Check if we're entering a section
+                if 'datos del cliente' in original_key.lower() or ('cliente' in original_key.lower() and 'datos' in original_key.lower()):
+                    in_cliente_section = True
+                    in_proveedor_section = False
+                    logger.debug("Entering CLIENTE section")
+                elif 'datos del proveedor' in original_key.lower() or ('proveedor' in original_key.lower() and 'datos' in original_key.lower()):
+                    in_proveedor_section = True
+                    in_cliente_section = False
+                    logger.debug("Entering PROVEEDOR section")
+                
+                # RFC - assign based on section context or order
+                if 'rfc' in key_lower:
+                    if in_proveedor_section or (not in_cliente_section and proveedor_rfc_assigned == False and cliente_rfc_assigned):
+                        # If we're in proveedor section, or if cliente RFC already assigned, this is proveedor
+                        if not proveedor_rfc_assigned:
+                            invoice_data["proveedor"]["rfc"] = value_str
+                            proveedor_rfc_assigned = True
+                            logger.debug(f"Assigned RFC to PROVEEDOR: {value_str}")
+                    else:
+                        # Otherwise, assign to cliente
+                        if not cliente_rfc_assigned:
+                            invoice_data["cliente"]["rfc"] = value_str
+                            cliente_rfc_assigned = True
+                            logger.debug(f"Assigned RFC to CLIENTE: {value_str}")
+                
+                # Cliente section keywords
+                elif any(kw in key_lower for kw in ['cliente', 'client', 'customer', 'comprador']):
                     if 'nombre' in key_lower or 'name' in key_lower:
                         invoice_data["cliente"]["nombre"] = value_str
+                        cliente_nombre_assigned = True
                     elif 'direccion' in key_lower or 'address' in key_lower or 'dirección' in key_lower:
                         invoice_data["cliente"]["direccion"] = value_str
+                        cliente_direccion_assigned = True
                     elif 'rfc' in key_lower:
                         invoice_data["cliente"]["rfc"] = value_str
+                        cliente_rfc_assigned = True
                     else:
-                        if not invoice_data["cliente"].get("nombre"):
+                        if not cliente_nombre_assigned:
                             invoice_data["cliente"]["nombre"] = value_str
+                            cliente_nombre_assigned = True
                 
-                # Proveedor
+                # Proveedor section
                 elif any(kw in key_lower for kw in ['proveedor', 'provider', 'vendor', 'supplier', 'vendedor']):
                     if 'nombre' in key_lower or 'name' in key_lower:
                         invoice_data["proveedor"]["nombre"] = value_str
+                        proveedor_nombre_assigned = True
                     elif 'direccion' in key_lower or 'address' in key_lower or 'dirección' in key_lower:
                         invoice_data["proveedor"]["direccion"] = value_str
+                        proveedor_direccion_assigned = True
                     elif 'rfc' in key_lower:
                         invoice_data["proveedor"]["rfc"] = value_str
+                        proveedor_rfc_assigned = True
                     else:
-                        if not invoice_data["proveedor"].get("nombre"):
+                        if not proveedor_nombre_assigned:
                             invoice_data["proveedor"]["nombre"] = value_str
+                            proveedor_nombre_assigned = True
+                
+                # Generic "Nombre:" - assign based on section context or order
+                elif 'nombre' in key_lower or 'name' in key_lower:
+                    if in_proveedor_section:
+                        # We're in proveedor section
+                        if not proveedor_nombre_assigned:
+                            invoice_data["proveedor"]["nombre"] = value_str
+                            proveedor_nombre_assigned = True
+                            logger.debug(f"Assigned Nombre to PROVEEDOR: {value_str}")
+                    elif in_cliente_section or not cliente_nombre_assigned:
+                        # We're in cliente section or haven't assigned cliente yet
+                        if not cliente_nombre_assigned:
+                            invoice_data["cliente"]["nombre"] = value_str
+                            cliente_nombre_assigned = True
+                            logger.debug(f"Assigned Nombre to CLIENTE: {value_str}")
+                    else:
+                        # Cliente already assigned, this must be proveedor
+                        if not proveedor_nombre_assigned:
+                            invoice_data["proveedor"]["nombre"] = value_str
+                            proveedor_nombre_assigned = True
+                            logger.debug(f"Assigned Nombre to PROVEEDOR (by order): {value_str}")
+                
+                # Generic "Dirección:" - assign based on section context or order
+                elif 'direccion' in key_lower or 'address' in key_lower or 'dirección' in key_lower:
+                    if in_proveedor_section:
+                        # We're in proveedor section
+                        if not proveedor_direccion_assigned:
+                            invoice_data["proveedor"]["direccion"] = value_str
+                            proveedor_direccion_assigned = True
+                            logger.debug(f"Assigned Direccion to PROVEEDOR: {value_str}")
+                    elif in_cliente_section or not cliente_direccion_assigned:
+                        # We're in cliente section or haven't assigned cliente yet
+                        if not cliente_direccion_assigned:
+                            invoice_data["cliente"]["direccion"] = value_str
+                            cliente_direccion_assigned = True
+                            logger.debug(f"Assigned Direccion to CLIENTE: {value_str}")
+                    else:
+                        # Cliente already assigned, this must be proveedor
+                        if not proveedor_direccion_assigned:
+                            invoice_data["proveedor"]["direccion"] = value_str
+                            proveedor_direccion_assigned = True
+                            logger.debug(f"Assigned Direccion to PROVEEDOR (by order): {value_str}")
                 
                 # Número de factura
                 elif any(kw in key_lower for kw in ['número de factura', 'numero de factura', 'invoice number', 'factura no', 'factura numero', 'invoice no']):
@@ -431,22 +521,58 @@ class TextractService:
             products = self._parse_products_from_tables(tables)
             if products:
                 invoice_data["productos"] = products
+                logger.info(f"Extracted {len(products)} products from tables")
+                for idx, prod in enumerate(products, 1):
+                    logger.info(f"Product {idx}: cantidad={prod.get('cantidad')}, nombre={prod.get('nombre')}, precio_unitario={prod.get('precio_unitario')}, total={prod.get('total')}")
+            else:
+                logger.warning("No products extracted from tables")
+            
+            # Log extracted data for debugging
+            logger.info(f"Extracted cliente: {invoice_data.get('cliente')}")
+            logger.info(f"Extracted proveedor: {invoice_data.get('proveedor')}")
             
             # Fallback: try to extract from raw text if key-value pairs didn't work
-            if raw_text and not invoice_data.get("numero_factura"):
-                invoice_data.update(self._parse_invoice_from_text(raw_text))
+            # Especially for cliente and proveedor which might not be in key-value format
+            if raw_text:
+                # If cliente or proveedor are empty, try to extract from raw text
+                if not invoice_data.get("cliente") or not invoice_data["cliente"].get("nombre"):
+                    fallback_data = self._parse_invoice_from_text(raw_text)
+                    if fallback_data.get("cliente") and fallback_data["cliente"].get("nombre"):
+                        if not invoice_data.get("cliente"):
+                            invoice_data["cliente"] = {}
+                        invoice_data["cliente"].update(fallback_data["cliente"])
+                
+                if not invoice_data.get("proveedor") or not invoice_data["proveedor"].get("nombre"):
+                    fallback_data = self._parse_invoice_from_text(raw_text)
+                    if fallback_data.get("proveedor") and fallback_data["proveedor"].get("nombre"):
+                        if not invoice_data.get("proveedor"):
+                            invoice_data["proveedor"] = {}
+                        invoice_data["proveedor"].update(fallback_data["proveedor"])
+                
+                # Other fields fallback
+                if not invoice_data.get("numero_factura"):
+                    fallback_data = self._parse_invoice_from_text(raw_text)
+                    if fallback_data.get("numero_factura"):
+                        invoice_data["numero_factura"] = fallback_data["numero_factura"]
+                    if fallback_data.get("fecha"):
+                        invoice_data["fecha"] = fallback_data["fecha"]
+                    if fallback_data.get("total"):
+                        invoice_data["total"] = fallback_data["total"]
             
         except Exception as e:
             logger.error(f"Error parsing invoice from response: {str(e)}")
         
         return invoice_data
     
-    def _extract_key_value_pairs(self, response: Dict[str, Any]) -> Dict[str, str]:
-        """Extract Key-Value pairs from Textract FORMS response."""
-        key_value_pairs = {}
+    def _extract_key_value_pairs(self, response: Dict[str, Any]) -> List[Dict[str, str]]:
+        """
+        Extract Key-Value pairs from Textract FORMS response.
+        Returns a list to preserve order and allow duplicates.
+        """
+        key_value_pairs_list = []
         
         if 'Blocks' not in response:
-            return key_value_pairs
+            return key_value_pairs_list
         
         # Build relationships map
         relationships = {}
@@ -459,7 +585,7 @@ class TextractService:
                 if 'Relationships' in block:
                     relationships[block_id] = block['Relationships']
         
-        # Find KEY-VALUE pairs
+        # Find KEY-VALUE pairs and preserve order
         for block in response['Blocks']:
             if block.get('BlockType') == 'KEY_VALUE_SET':
                 entity_type = block.get('EntityTypes', [])
@@ -469,9 +595,21 @@ class TextractService:
                     # Find associated VALUE
                     value_text = self._get_value_from_key(block, blocks_map, relationships)
                     if key_text and value_text:
-                        key_value_pairs[key_text.lower()] = value_text
+                        # Get Y position to preserve order (top to bottom)
+                        y_position = block.get('Geometry', {}).get('BoundingBox', {}).get('Top', 0)
+                        key_value_pairs_list.append({
+                            'key': key_text.lower(),
+                            'value': value_text,
+                            'y_position': y_position,
+                            'original_key': key_text
+                        })
+                        logger.debug(f"Found key-value pair: '{key_text}' = '{value_text}' (Y: {y_position:.4f})")
         
-        return key_value_pairs
+        # Sort by Y position (top to bottom) to preserve document order
+        key_value_pairs_list.sort(key=lambda x: x['y_position'])
+        
+        logger.info(f"Total key-value pairs extracted: {len(key_value_pairs_list)}")
+        return key_value_pairs_list
     
     def _get_text_from_block(self, block: Dict[str, Any], blocks_map: Dict, relationships: Dict) -> str:
         """Get text from a block by following relationships."""
@@ -489,18 +627,17 @@ class TextractService:
     
     def _get_value_from_key(self, key_block: Dict[str, Any], blocks_map: Dict, relationships: Dict) -> str:
         """Get value associated with a key block."""
-        # Find VALUE block associated with this KEY
-        for block_id, block in blocks_map.items():
-            if block.get('BlockType') == 'KEY_VALUE_SET':
-                entity_type = block.get('EntityTypes', [])
-                if 'VALUE' in entity_type:
-                    # Check if this VALUE is related to our KEY
-                    if 'Relationships' in block:
-                        for rel in block['Relationships']:
-                            if rel.get('Type') == 'VALUE':
-                                for value_id in rel.get('Ids', []):
-                                    if value_id == key_block.get('Id'):
-                                        return self._get_text_from_block(block, blocks_map, relationships)
+        # In Textract, a KEY block has a relationship of type "VALUE" that points to the VALUE block ID
+        if 'Relationships' in key_block:
+            for rel in key_block['Relationships']:
+                if rel.get('Type') == 'VALUE':
+                    # Get the VALUE block IDs
+                    for value_id in rel.get('Ids', []):
+                        value_block = blocks_map.get(value_id)
+                        if value_block and value_block.get('BlockType') == 'KEY_VALUE_SET':
+                            entity_type = value_block.get('EntityTypes', [])
+                            if 'VALUE' in entity_type:
+                                return self._get_text_from_block(value_block, blocks_map, relationships)
         
         return ""
     
@@ -564,7 +701,7 @@ class TextractService:
         return ' '.join(text_parts).strip()
     
     def _parse_products_from_tables(self, tables: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Parse products from table data."""
+        """Parse products from table data by identifying headers first."""
         products = []
         
         for table in tables:
@@ -583,34 +720,98 @@ class TextractService:
                     rows[row] = {}
                 rows[row][col] = text
             
-            # Skip header row (row 1)
-            # Try to identify product rows
+            if not rows:
+                continue
+            
+            # Find header row (usually row 1, but could be row 0)
+            header_row_num = None
+            column_mapping = {}  # Maps column index to field name
+            
+            # Try to find header row
             for row_num in sorted(rows.keys()):
-                if row_num == 1:  # Skip header
+                row_data = rows[row_num]
+                header_texts = [rows[row_num].get(col, '').lower() for col in sorted(row_data.keys())]
+                header_text = ' '.join(header_texts)
+                
+                # Check if this looks like a header row
+                if any(keyword in header_text for keyword in ['cantidad', 'producto', 'precio', 'unitario', 'total', 'descripcion']):
+                    header_row_num = row_num
+                    # Map columns based on header content
+                    for col_num in sorted(row_data.keys()):
+                        header_cell = row_data[col_num].lower().strip()
+                        
+                        if 'cantidad' in header_cell or 'qty' in header_cell:
+                            column_mapping[col_num] = 'cantidad'
+                        elif 'producto' in header_cell or 'descripcion' in header_cell or 'nombre' in header_cell or 'item' in header_cell:
+                            column_mapping[col_num] = 'nombre'
+                        elif 'precio' in header_cell and 'unitario' in header_cell:
+                            column_mapping[col_num] = 'precio_unitario'
+                        elif 'precio' in header_cell and 'unitario' not in header_cell:
+                            # Could be precio unitario or total, check position
+                            if not column_mapping.get('precio_unitario'):
+                                column_mapping[col_num] = 'precio_unitario'
+                        elif 'total' in header_cell and 'precio' not in header_cell:
+                            column_mapping[col_num] = 'total'
+                    
+                    break
+            
+            # If no header found, use default mapping (assume order: cantidad, nombre, precio_unitario, total)
+            if not header_row_num:
+                header_row_num = min(rows.keys()) if rows else 1
+                # Default mapping: assume first numeric is cantidad, last two amounts are precio and total
+                sorted_cols = sorted(rows[header_row_num].keys()) if header_row_num in rows else []
+                if len(sorted_cols) >= 4:
+                    column_mapping[sorted_cols[0]] = 'cantidad'
+                    column_mapping[sorted_cols[1]] = 'nombre'
+                    column_mapping[sorted_cols[2]] = 'precio_unitario'
+                    column_mapping[sorted_cols[3]] = 'total'
+                elif len(sorted_cols) == 3:
+                    column_mapping[sorted_cols[0]] = 'cantidad'
+                    column_mapping[sorted_cols[1]] = 'nombre'
+                    column_mapping[sorted_cols[2]] = 'total'
+            
+            # Parse data rows
+            for row_num in sorted(rows.keys()):
+                if row_num == header_row_num:  # Skip header row
                     continue
                 
                 row_data = rows[row_num]
-                # Try to find quantity, name, price, total columns
                 product = {}
                 
-                # Common patterns: [cantidad, nombre/descripcion, precio unitario, total]
+                # Extract data based on column mapping
                 for col_num in sorted(row_data.keys()):
                     text = row_data[col_num].strip()
                     if not text:
                         continue
                     
-                    # Try to identify column by content
-                    if self._is_numeric(text) and not product.get("cantidad"):
-                        product["cantidad"] = text
-                    elif '$' in text or self._is_amount(text):
-                        if not product.get("precio_unitario"):
-                            product["precio_unitario"] = self._extract_amount(text)
-                        elif not product.get("total"):
-                            product["total"] = self._extract_amount(text)
+                    field_name = column_mapping.get(col_num)
+                    if field_name:
+                        if field_name in ['precio_unitario', 'total']:
+                            # Extract amount, preserving format
+                            amount = self._extract_amount(text)
+                            if amount:
+                                product[field_name] = amount
+                            else:
+                                # If extraction fails, use original text
+                                product[field_name] = text
+                        else:
+                            product[field_name] = text
                     else:
-                        if not product.get("nombre"):
+                        # Fallback: try to identify by content if no mapping
+                        if not product.get("cantidad") and self._is_numeric(text) and not ('$' in text or self._is_amount(text)):
+                            product["cantidad"] = text
+                        elif not product.get("nombre") and not self._is_amount(text):
                             product["nombre"] = text
+                        elif not product.get("precio_unitario") and ('$' in text or self._is_amount(text)):
+                            amount = self._extract_amount(text)
+                            if amount:
+                                product["precio_unitario"] = amount
+                        elif not product.get("total") and ('$' in text or self._is_amount(text)):
+                            amount = self._extract_amount(text)
+                            if amount:
+                                product["total"] = amount
                 
+                # Only add product if it has at least nombre or cantidad
                 if product.get("nombre") or product.get("cantidad"):
                     products.append(product)
         
@@ -644,7 +845,58 @@ class TextractService:
     def _parse_invoice_from_text(self, raw_text: str) -> Dict[str, Any]:
         """Fallback: Parse invoice data from raw text using regex patterns."""
         import re
-        data = {}
+        data = {
+            "cliente": {},
+            "proveedor": {}
+        }
+        
+        # Extract cliente (client) - look for "DATOS DEL CLIENTE" section
+        cliente_section_pattern = r'DATOS\s+DEL\s+CLIENTE[^\n]*\n(.*?)(?=DATOS\s+DEL\s+PROVEEDOR|DETALLE|$)'
+        cliente_match = re.search(cliente_section_pattern, raw_text, re.IGNORECASE | re.DOTALL)
+        if cliente_match:
+            cliente_text = cliente_match.group(1)
+            
+            # Extract nombre
+            nombre_match = re.search(r'Nombre\s*:?\s*([^\n]+)', cliente_text, re.IGNORECASE)
+            if nombre_match:
+                data["cliente"]["nombre"] = nombre_match.group(1).strip()
+            
+            # Extract dirección
+            direccion_match = re.search(r'Direcci[oó]n\s*:?\s*([^\n]+(?:\n[^\n]+)*?)(?=RFC|$)', cliente_text, re.IGNORECASE)
+            if direccion_match:
+                direccion = direccion_match.group(1).strip()
+                # Clean up multiple lines
+                direccion = ' '.join(line.strip() for line in direccion.split('\n') if line.strip())
+                data["cliente"]["direccion"] = direccion
+            
+            # Extract RFC
+            rfc_match = re.search(r'RFC\s*:?\s*([A-Z0-9]+)', cliente_text, re.IGNORECASE)
+            if rfc_match:
+                data["cliente"]["rfc"] = rfc_match.group(1).strip()
+        
+        # Extract proveedor (provider) - look for "DATOS DEL PROVEEDOR" section
+        proveedor_section_pattern = r'DATOS\s+DEL\s+PROVEEDOR[^\n]*\n(.*?)(?=DETALLE|TOTAL|$)'
+        proveedor_match = re.search(proveedor_section_pattern, raw_text, re.IGNORECASE | re.DOTALL)
+        if proveedor_match:
+            proveedor_text = proveedor_match.group(1)
+            
+            # Extract nombre
+            nombre_match = re.search(r'Nombre\s*:?\s*([^\n]+)', proveedor_text, re.IGNORECASE)
+            if nombre_match:
+                data["proveedor"]["nombre"] = nombre_match.group(1).strip()
+            
+            # Extract dirección
+            direccion_match = re.search(r'Direcci[oó]n\s*:?\s*([^\n]+(?:\n[^\n]+)*?)(?=RFC|$)', proveedor_text, re.IGNORECASE)
+            if direccion_match:
+                direccion = direccion_match.group(1).strip()
+                # Clean up multiple lines
+                direccion = ' '.join(line.strip() for line in direccion.split('\n') if line.strip())
+                data["proveedor"]["direccion"] = direccion
+            
+            # Extract RFC
+            rfc_match = re.search(r'RFC\s*:?\s*([A-Z0-9]+)', proveedor_text, re.IGNORECASE)
+            if rfc_match:
+                data["proveedor"]["rfc"] = rfc_match.group(1).strip()
         
         # Extract invoice number
         invoice_patterns = [

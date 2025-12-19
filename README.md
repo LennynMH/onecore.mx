@@ -49,7 +49,14 @@ El proyecto fue desarrollado como evaluación técnica para OneCore Virtual Core
 - ✅ **Carga de archivos CSV** con validación completa
 - ✅ **Carga de documentos** (PDF, JPG, PNG) con almacenamiento en S3 y BD
 - ✅ **APIs de documentos** con filtros, paginación y búsqueda
+- ✅ **Clasificación automática** con AWS Textract (FACTURA/INFORMACIÓN)
+- ✅ **Extracción de datos** estructurados (FASE 3)
+  - Facturas: Cliente, Proveedor, Productos, Totales
+  - Información: Descripción, Resumen, Sentimiento (OpenAI)
+- ✅ **Historial completo** con filtros avanzados y exportación a Excel
 - ✅ **Integración con AWS S3** para almacenamiento
+- ✅ **Integración con AWS Textract** para análisis de documentos
+- ✅ **Integración con OpenAI** para análisis de sentimiento
 - ✅ **Integración con SQL Server** para persistencia
 - ✅ **Sistema de validación mejorado** con tracking de errores en BD
 - ✅ **Nombres únicos de archivos** con timestamp para evitar duplicados
@@ -141,8 +148,8 @@ El proyecto sigue una **Arquitectura Limpia (Clean Architecture)** con separaci�
 ### Infraestructura
 - **Docker** & **Docker Compose** - Contenedores
 - **AWS S3** - Almacenamiento de archivos
-- **AWS Textract** (planificado) - Extracción de datos con IA
-- **OpenAI** (planificado) - Análisis de sentimiento
+- **AWS Textract** - Extracción de datos con IA (✅ Implementado)
+- **OpenAI** - Análisis de sentimiento (✅ Implementado)
 
 ### Herramientas de Desarrollo
 - **Adminer** - Interfaz web para gestión de BD
@@ -591,8 +598,23 @@ Accede a http://localhost:8000/docs para probar los endpoints interactivamente.
 - ✅ Filtros por clasificación y rango de fechas
 - ✅ Paginación
 - ✅ Registro de eventos automático
-- 🚧 Clasificación automática (FASE 2 - En desarrollo)
-- 🚧 Extracción de datos (FASE 3 - En desarrollo)
+- ✅ Clasificación automática (FASE 2 - COMPLETA)
+- ✅ Extracción de datos (FASE 3 - COMPLETA)
+  - Facturas: Cliente, Proveedor, Productos, Totales
+  - Información: Descripción, Resumen, Sentimiento
+
+### Historial
+
+| Método | Endpoint | Descripción | Autenticación |
+|--------|----------|-------------|---------------|
+| GET | `/api/v1/history` | Listar eventos con filtros avanzados | Sí |
+| GET | `/api/v1/history/export` | Exportar historial a Excel | Sí |
+
+**Características:**
+- ✅ Filtros avanzados (tipo, documento, usuario, clasificación, fechas, descripción)
+- ✅ Paginación
+- ✅ Exportación a Excel (.xlsx)
+- ✅ Registro automático de eventos (DOCUMENT_UPLOAD, AI_PROCESSING, USER_INTERACTION)
 
 ---
 
@@ -794,6 +816,15 @@ docker-compose -f docker-compose.production.yml up -d
 - [x] Campos `has_errors` y `error_count` en `file_uploads`
 - [x] **Módulo de Documentos (FASE 1):** APIs para subir, listar y obtener documentos
 - [x] **Tablas de documentos:** `documents`, `document_extracted_data`, `events`
+- [x] **Clasificación automática (FASE 2):** AWS Textract para clasificar FACTURA/INFORMACIÓN
+- [x] **Extracción de datos (FASE 3):** 
+  - Parser de facturas (Cliente, Proveedor, Productos, Totales)
+  - Parser de información (Descripción, Resumen, Sentimiento)
+  - Integración con OpenAI para análisis de sentimiento
+- [x] **Historial completo (FASE 4):**
+  - Filtros avanzados (tipo, documento, usuario, clasificación, fechas, descripción)
+  - Paginación
+  - Exportación a Excel
 - [x] Arquitectura limpia y modular
 - [x] Docker Compose para desarrollo y producción
 - [x] Frontend React con autenticación
@@ -804,17 +835,10 @@ docker-compose -f docker-compose.production.yml up -d
 
 ### 🚧 En Desarrollo / Planificado
 
-- [ ] Módulo de análisis de documentos con IA (FASE 2-4)
-  - [x] Carga de documentos (PDF, JPG, PNG) ✅ FASE 1
-  - [ ] Clasificación automática (FACTURA/INFORMACIÓN) 🚧 FASE 2
-  - [ ] Extracción de datos con AWS Textract 🚧 FASE 3
-  - [ ] Análisis de sentimiento con OpenAI 🚧 FASE 3
-- [ ] Historial completo de documentos (FASE 4)
-  - [x] Filtros básicos (tipo, fecha) ✅ FASE 1
-  - [ ] Filtro por descripción 🚧 FASE 4
-  - [ ] Exportación a Excel 🚧 FASE 4
 - [ ] Procesamiento asíncrono de documentos
-- [ ] Integración completa con servicios de IA
+- [ ] Mejoras en UI del FrontEnd
+- [ ] Integración completa del historial en FrontEnd
+- [ ] Optimizaciones de rendimiento
 
 ---
 
@@ -827,23 +851,28 @@ docker-compose -f docker-compose.production.yml up -d
 - [x] Integración con S3 para documentos
 - [x] Endpoints de listado y obtención de documentos
 - [x] Filtros básicos y paginación
+- [x] Registro de eventos
 
-### 🚧 Fase 2: Clasificación - EN DESARROLLO
-- [ ] Integrar AWS Textract
-- [ ] Implementar clasificación básica (FACTURA/INFORMACIÓN)
-- [ ] Modificar endpoint de upload para incluir clasificación
+### ✅ Fase 2: Clasificación Automática - COMPLETA
+- [x] Integrar AWS Textract
+- [x] Implementar clasificación básica (FACTURA/INFORMACIÓN)
+- [x] Modificar endpoint de upload para incluir clasificación
+- [x] Sistema de keywords con pesos para mejor precisión
 
-### 🚧 Fase 3: Extracción de Datos - PENDIENTE
-- [ ] Parser de facturas con Textract
-- [ ] Extracción de campos clave
-- [ ] Guardado estructurado en BD
-- [ ] Análisis de sentimiento con OpenAI
+### ✅ Fase 3: Extracción de Datos - COMPLETA
+- [x] Parser de facturas con Textract (FORMS y TABLES)
+- [x] Extracción de campos clave (Cliente, Proveedor, Productos, Totales)
+- [x] Parser de información (Descripción, Resumen)
+- [x] Guardado estructurado en BD (`document_extracted_data`)
+- [x] Análisis de sentimiento con OpenAI
+- [x] Integración completa en flujo de upload
 
-### 🚧 Fase 4: Historial y Filtros - PENDIENTE
-- [x] Endpoint de listado con filtros básicos ✅
-- [ ] Filtro por descripción (búsqueda de texto)
-- [ ] Exportación a Excel
-- [ ] Mejoras en UI del historial
+### ✅ Fase 4: Historial Completo - COMPLETA
+- [x] Endpoint de listado con filtros avanzados
+- [x] Filtro por descripción (búsqueda de texto)
+- [x] Exportación a Excel (.xlsx)
+- [x] Paginación y ordenamiento
+- [x] Registro automático de eventos
 
 ---
 

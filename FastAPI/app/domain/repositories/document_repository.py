@@ -2,6 +2,7 @@
 
 from abc import ABC, abstractmethod
 from typing import List, Optional, Dict, Any
+from datetime import datetime
 from app.domain.entities.document import Document, Event
 
 
@@ -49,5 +50,26 @@ class DocumentRepository(ABC):
     @abstractmethod
     async def save_event(self, event: Event) -> Event:
         """Save event to database."""
+        pass
+    
+    @abstractmethod
+    async def list_events(
+        self,
+        event_type: Optional[str] = None,
+        document_id: Optional[int] = None,
+        user_id: Optional[int] = None,
+        classification: Optional[str] = None,
+        date_from: Optional[datetime] = None,
+        date_to: Optional[datetime] = None,
+        description_search: Optional[str] = None,
+        page: int = 1,
+        page_size: int = 50
+    ) -> Dict[str, Any]:
+        """
+        List events with filters and pagination.
+        
+        Returns:
+            Dictionary with 'total', 'page', 'page_size', 'total_pages', 'events'
+        """
         pass
 

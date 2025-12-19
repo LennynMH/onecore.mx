@@ -2,7 +2,7 @@
 	"info": {
 		"_postman_id": "onecore-api-collection",
 		"name": "OneCore API - Evaluación Técnica",
-		"description": "Colección completa de APIs para OneCore según EVALUACION_TECNICA.txt y EVALUACION_TECNICA_V2.txt\n\n**PARTE 1: APIs (EVALUACION_TECNICA.txt)**\n\n1. ✅ API de Inicio de Sesión (Session Login API)\n   - Endpoint para usuarios anónimos\n   - JWT firmado con id_usuario y rol\n   - Expiración de 15 minutos\n\n2. ✅ API de Carga y Validación de Archivos (File Upload and Validation API)\n   - Subida a AWS S3\n   - Almacenamiento en SQL Server\n   - Validación (valores vacíos, tipos incorrectos, duplicados)\n   - Control de acceso por rol con JWT\n\n3. ✅ API de Renovación de Token (Token Renewal API)\n   - Renueva JWT con tiempo adicional\n   - Solo si el token original no ha expirado\n\n**PARTE 2: Módulos Web (EVALUACION_TECNICA_V2.txt) - FASE 1**\n\n4. ✅ API de Documentos (FASE 1 - Infraestructura Base)\n   - POST /api/v1/documents/upload - Subir documentos (PDF, JPG, PNG)\n   - GET /api/v1/documents - Listar documentos con filtros\n   - GET /api/v1/documents/{id} - Obtener documento por ID\n   - 🚧 FASE 2: Clasificación automática (En desarrollo)\n   - 🚧 FASE 3: Extracción de datos (En desarrollo)",
+		"description": "Colección completa de APIs para OneCore según EVALUACION_TECNICA.txt y EVALUACION_TECNICA_V2.txt\n\n**PARTE 1: APIs (EVALUACION_TECNICA.txt)**\n\n1. ✅ API de Inicio de Sesión (Session Login API)\n   - Endpoint para usuarios anónimos\n   - JWT firmado con id_usuario y rol\n   - Expiración de 15 minutos\n\n2. ✅ API de Carga y Validación de Archivos (File Upload and Validation API)\n   - Subida a AWS S3\n   - Almacenamiento en SQL Server\n   - Validación (valores vacíos, tipos incorrectos, duplicados)\n   - Control de acceso por rol con JWT\n\n3. ✅ API de Renovación de Token (Token Renewal API)\n   - Renueva JWT con tiempo adicional\n   - Solo si el token original no ha expirado\n\n**PARTE 2: Módulos Web (EVALUACION_TECNICA_V2.txt)**\n\n4. ✅ API de Documentos (FASE 1-3 COMPLETA)\n   - POST /api/v1/documents/upload - Subir documentos (PDF, JPG, PNG)\n   - GET /api/v1/documents - Listar documentos con filtros\n   - GET /api/v1/documents/{id} - Obtener documento por ID\n   - ✅ FASE 2: Clasificación automática (FACTURA/INFORMACIÓN) con AWS Textract\n   - ✅ FASE 3: Extracción de datos estructurados (Facturas e Información)\n\n5. ✅ API de Historial (FASE 4 COMPLETA)\n   - GET /api/v1/history - Listar eventos con filtros avanzados\n   - GET /api/v1/history/export - Exportar historial a Excel",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
 		"_exporter_id": "onecore-api"
 	},
@@ -649,7 +649,101 @@
 					"response": []
 				}
 			],
-			"description": "**FASE 1: MÓDULO DE DOCUMENTOS (EVALUACION_TECNICA_V2.txt)**\n\nAPIs para el módulo de análisis de documentos.\n\n**APIs implementadas:**\n- ✅ POST /api/v1/documents/upload - Subir documentos (PDF, JPG, PNG)\n- ✅ GET /api/v1/documents - Listar documentos con filtros\n- ✅ GET /api/v1/documents/{id} - Obtener documento por ID\n\n**Características:**\n- ✅ Subida a S3 y Base de Datos\n- ✅ Nombres únicos con timestamp\n- ✅ Filtros y paginación\n- ✅ Registro de eventos\n\n**Próximas fases:**\n- 🚧 FASE 2: Clasificación automática (FACTURA/INFORMACIÓN)\n- 🚧 FASE 3: Extracción de datos estructurados\n- 🚧 FASE 4: Histórico completo con exportación"
+			"description": "**MÓDULO DE DOCUMENTOS (FASE 1-3 COMPLETA)**\n\nAPIs para el módulo de análisis de documentos.\n\n**APIs implementadas:**\n- ✅ POST /api/v1/documents/upload - Subir documentos (PDF, JPG, PNG)\n- ✅ GET /api/v1/documents - Listar documentos con filtros\n- ✅ GET /api/v1/documents/{id} - Obtener documento por ID\n\n**Características:**\n- ✅ Subida a S3 y Base de Datos\n- ✅ Nombres únicos con timestamp\n- ✅ Filtros y paginación\n- ✅ Registro de eventos\n- ✅ FASE 2: Clasificación automática (FACTURA/INFORMACIÓN) con AWS Textract\n- ✅ FASE 3: Extracción de datos estructurados\n  - Facturas: Cliente, Proveedor, Productos, Totales\n  - Información: Descripción, Resumen, Sentimiento (OpenAI)"
+		},
+		{
+			"name": "5. API de Historial (FASE 4)",
+			"item": [
+				{
+					"name": "Get History",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    var jsonData = pm.response.json();",
+									"    pm.test(\"Historial obtenido\", function() {",
+									"        pm.expect(jsonData).to.have.property(\"events\");",
+									"        pm.expect(jsonData).to.have.property(\"total\");",
+									"        pm.expect(jsonData.events).to.be.an(\"array\");",
+									"    });",
+									"    pm.test(\"Contiene paginación\", function() {",
+									"        pm.expect(jsonData).to.have.property(\"page\");",
+									"        pm.expect(jsonData).to.have.property(\"page_size\");",
+									"        pm.expect(jsonData).to.have.property(\"total_pages\");",
+									"    });",
+									"    console.log(\"✅ Total de eventos: \" + jsonData.total);",
+									"    console.log(\"📄 Eventos en esta página: \" + jsonData.events.length);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/history?page=1&page_size=50",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "history"],
+							"query": [
+								{"key": "page", "value": "1"},
+								{"key": "page_size", "value": "50"},
+								{"key": "event_type", "value": "", "disabled": true},
+								{"key": "classification", "value": "", "disabled": true}
+							]
+						},
+						"description": "**FASE 4: API DE HISTORIAL**\n\nListar eventos con filtros avanzados y paginación.\n\n**Filtros:** event_type, document_id, user_id, classification, date_from, date_to, description_search"
+					},
+					"response": []
+				},
+				{
+					"name": "Export History to Excel",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    pm.test(\"Exportación exitosa\", function() {",
+									"        pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"spreadsheetml\");",
+									"    });",
+									"    console.log(\"✅ Archivo Excel generado\");",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/history/export?include_document_details=true",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "history", "export"],
+							"query": [
+								{"key": "include_document_details", "value": "true"}
+							]
+						},
+						"description": "**FASE 4: EXPORTACIÓN A EXCEL**\n\nExporta historial de eventos a archivo Excel (.xlsx)."
+					},
+					"response": []
+				}
+			],
+			"description": "**FASE 4: MÓDULO HISTÓRICO**\n\nAPIs para historial de eventos.\n\n- ✅ GET /api/v1/history - Listar eventos con filtros\n- ✅ GET /api/v1/history/export - Exportar a Excel"
 		}
 	],
 	"event": [

@@ -1,7 +1,22 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DocumentUploadResponse, InvoiceData, InformationData } from '../services/api';
+import * as XLSX from 'xlsx';
+import { toast } from 'react-toastify';
 import './DocumentResults.css';
+
+// Función helper para formatear precios
+const formatPrice = (value?: string): string => {
+  if (!value || value === '-') return '-';
+  // Remover caracteres no numéricos excepto punto y coma
+  const cleaned = value.replace(/[^\d.,]/g, '');
+  if (!cleaned) return value;
+  // Convertir coma a punto si es necesario
+  const normalized = cleaned.replace(',', '.');
+  const num = parseFloat(normalized);
+  if (isNaN(num)) return value;
+  return `$${num.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+};
 
 const DocumentResults: React.FC = () => {
   const [result, setResult] = useState<DocumentUploadResponse | null>(null);
@@ -154,41 +169,16 @@ const InvoiceView: React.FC<{ data: InvoiceData }> = ({ data }) => {
               <span className="data-value">{data.fecha}</span>
             </div>
           )}
-          {data.total_factura && (
-            <div className="data-item">
-              <span className="data-label">Total:</span>
-              <span className="data-value total-amount">{data.total_factura}</span>
-            </div>
-          )}
         </div>
       </div>
 
       {data.productos && data.productos.length > 0 && (
-        <div className="invoice-section">
-          <h4>Productos</h4>
-          <div className="products-table">
-            <table>
-              <thead>
-                <tr>
-                  <th>Cantidad</th>
-                  <th>Nombre</th>
-                  <th>Precio Unitario</th>
-                  <th>Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.productos.map((producto, index) => (
-                  <tr key={index}>
-                    <td>{producto.cantidad || '-'}</td>
-                    <td>{producto.nombre || '-'}</td>
-                    <td>{producto.precio_unitario || '-'}</td>
-                    <td>{producto.total || '-'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <ProductsTable 
+          productos={data.productos} 
+          subtotal={data.subtotal}
+          iva={data.iva}
+          total={data.total || data.total_factura}
+        />
       )}
     </div>
   );
@@ -224,6 +214,228 @@ const InformationView: React.FC<{ data: InformationData }> = ({ data }) => {
           </div>
         </div>
       )}
+    </div>
+  );
+};
+
+type SortField = 'cantidad' | 'nombre' | 'precio_unitario' | 'total';
+type SortDirection = 'asc' | 'desc';
+
+interface ProductsTableProps {
+  productos: Array<{
+    cantidad?: string;
+    nombre?: string;
+    precio_unitario?: string;
+    total?: string;
+  }>;
+  subtotal?: string;
+  iva?: string;
+  total?: string;
+}
+
+const ProductsTable: React.FC<ProductsTableProps> = ({ productos, subtotal, iva, total }) => {
+  const [sortField, setSortField] = useState<SortField | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [filterText, setFilterText] = useState('');
+
+  // Función para parsear valor numérico para ordenamiento
+  const parseNumericValue = (value?: string): number => {
+    if (!value || value === '-') return 0;
+    const cleaned = value.replace(/[^\d.,]/g, '').replace(',', '.');
+    const num = parseFloat(cleaned);
+    return isNaN(num) ? 0 : num;
+  };
+
+  // Filtrar productos
+  const filteredProductos = useMemo(() => {
+    if (!filterText) return productos;
+    const lowerFilter = filterText.toLowerCase();
+    return productos.filter(
+      (p) =>
+        p.nombre?.toLowerCase().includes(lowerFilter) ||
+        p.cantidad?.includes(lowerFilter) ||
+        p.precio_unitario?.includes(lowerFilter) ||
+        p.total?.includes(lowerFilter)
+    );
+  }, [productos, filterText]);
+
+  // Ordenar productos
+  const sortedProductos = useMemo(() => {
+    if (!sortField) return filteredProductos;
+    return [...filteredProductos].sort((a, b) => {
+      let aValue: string | number = a[sortField] || '';
+      let bValue: string | number = b[sortField] || '';
+
+      // Para campos numéricos, convertir a número
+      if (sortField === 'cantidad' || sortField === 'precio_unitario' || sortField === 'total') {
+        aValue = parseNumericValue(a[sortField]);
+        bValue = parseNumericValue(b[sortField]);
+      } else {
+        aValue = (aValue as string).toLowerCase();
+        bValue = (bValue as string).toLowerCase();
+      }
+
+      if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
+      if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [filteredProductos, sortField, sortDirection]);
+
+  // Calcular resumen
+  const summary = useMemo(() => {
+    const totalProductos = sortedProductos.length;
+    const sumaTotales = sortedProductos.reduce((sum, p) => {
+      return sum + parseNumericValue(p.total);
+    }, 0);
+    return { totalProductos, sumaTotales };
+  }, [sortedProductos]);
+
+  // Manejar ordenamiento
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  // Exportar a Excel
+  const handleExportExcel = () => {
+    try {
+      const worksheetData = [
+        ['Cantidad', 'Nombre', 'Precio Unitario', 'Total'],
+        ...sortedProductos.map((p) => [
+          p.cantidad || '-',
+          p.nombre || '-',
+          p.precio_unitario || '-',
+          p.total || '-',
+        ]),
+        [],
+        ['Suma de Totales', formatPrice(summary.sumaTotales.toString())],
+      ];
+
+      const ws = XLSX.utils.aoa_to_sheet(worksheetData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Productos');
+
+      const fileName = `productos_${new Date().toISOString().split('T')[0]}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+      toast.success('Archivo Excel exportado correctamente');
+    } catch (error) {
+      console.error('Error al exportar a Excel:', error);
+      toast.error('Error al exportar a Excel');
+    }
+  };
+
+  const getSortIcon = (field: SortField) => {
+    if (sortField !== field) return '⇅';
+    return sortDirection === 'asc' ? '↑' : '↓';
+  };
+
+  return (
+    <div className="invoice-section products-section">
+      <div className="products-header">
+        <h4>Productos</h4>
+        <div className="products-actions">
+          <input
+            type="text"
+            placeholder="Buscar productos..."
+            value={filterText}
+            onChange={(e) => setFilterText(e.target.value)}
+            className="products-filter"
+          />
+          <button onClick={handleExportExcel} className="btn btn-export">
+            Exportar a Excel
+          </button>
+        </div>
+      </div>
+
+      <div className="products-table-container">
+        <div className="products-table">
+          <table>
+            <thead>
+              <tr>
+                <th
+                  className="sortable numeric"
+                  onClick={() => handleSort('cantidad')}
+                >
+                  Cantidad {getSortIcon('cantidad')}
+                </th>
+                <th className="sortable" onClick={() => handleSort('nombre')}>
+                  Nombre {getSortIcon('nombre')}
+                </th>
+                <th
+                  className="sortable numeric"
+                  onClick={() => handleSort('precio_unitario')}
+                >
+                  Precio Unitario {getSortIcon('precio_unitario')}
+                </th>
+                <th
+                  className="sortable numeric"
+                  onClick={() => handleSort('total')}
+                >
+                  Total {getSortIcon('total')}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {sortedProductos.length > 0 ? (
+                sortedProductos.map((producto, index) => (
+                  <tr key={index}>
+                    <td className="numeric">{producto.cantidad || '-'}</td>
+                    <td>{producto.nombre || '-'}</td>
+                    <td className="numeric price">
+                      {formatPrice(producto.precio_unitario)}
+                    </td>
+                    <td className="numeric price total">
+                      {formatPrice(producto.total)}
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={4} className="no-results">
+                    No se encontraron productos
+                  </td>
+                </tr>
+              )}
+            </tbody>
+            <tfoot>
+              {subtotal && (
+                <tr className="summary-row">
+                  <td colSpan={3} className="summary-label text-right">
+                    <strong>Subtotal:</strong>
+                  </td>
+                  <td className="summary-value numeric price">
+                    <strong>{formatPrice(subtotal)}</strong>
+                  </td>
+                </tr>
+              )}
+              {iva && (
+                <tr className="summary-row">
+                  <td colSpan={3} className="summary-label text-right">
+                    <strong>IVA:</strong>
+                  </td>
+                  <td className="summary-value numeric price">
+                    <strong>{formatPrice(iva)}</strong>
+                  </td>
+                </tr>
+              )}
+              {total && (
+                <tr className="summary-row total-final">
+                  <td colSpan={3} className="summary-label text-right">
+                    <strong>TOTAL:</strong>
+                  </td>
+                  <td className="summary-value numeric price">
+                    <strong>{formatPrice(total)}</strong>
+                  </td>
+                </tr>
+              )}
+            </tfoot>
+          </table>
+        </div>
+      </div>
     </div>
   );
 };
