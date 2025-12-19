@@ -35,7 +35,20 @@ class TextractService:
     """Service for AWS Textract document analysis."""
     
     def __init__(self):
-        """Initialize Textract service."""
+        """
+        Inicializa el servicio de AWS Textract.
+        
+        ¿Qué hace la función?
+        Configura el cliente de AWS Textract usando las credenciales de settings.
+        Si las credenciales no están disponibles, el servicio queda deshabilitado
+        pero no lanza errores (permite funcionamiento sin Textract).
+        
+        ¿Qué parámetros recibe y de qué tipo?
+        - Ninguno
+        
+        ¿Qué dato regresa y de qué tipo?
+        - None
+        """
         self.textract_client = None
         self.is_configured = False
         
@@ -67,19 +80,28 @@ class TextractService:
         s3_bucket: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Analyze document using AWS Textract.
+        Analiza un documento usando AWS Textract para clasificación.
         
-        Args:
-            file: Document file to analyze
-            s3_key: S3 key if file is already in S3 (optional, for better performance)
-            s3_bucket: S3 bucket name (optional)
-            
-        Returns:
-            Dictionary with:
-            - classification: "FACTURA" or "INFORMACIÓN"
-            - raw_text: Extracted text from document
-            - confidence: Confidence score (0-100)
-            - processing_time_ms: Processing time in milliseconds
+        ¿Qué hace la función?
+        Extrae texto de un documento usando AWS Textract (desde S3 si está disponible
+        o desde bytes), clasifica el documento como FACTURA o INFORMACIÓN basándose
+        en el contenido extraído, y retorna el resultado con métricas de confianza.
+        
+        ¿Qué parámetros recibe y de qué tipo?
+        - file (UploadFile): Archivo del documento a analizar (PDF, JPG, PNG)
+        - s3_key (str | None): Clave S3 si el archivo ya está en S3 (opcional, mejora rendimiento)
+        - s3_bucket (str | None): Nombre del bucket S3 (opcional, requerido si s3_key está presente)
+        
+        ¿Qué dato regresa y de qué tipo?
+        - Dict[str, Any]: Diccionario con:
+          - classification (str): Clasificación del documento ("FACTURA" o "INFORMACIÓN")
+          - raw_text (str): Texto extraído del documento
+          - confidence (float): Puntuación de confianza (0-100)
+          - processing_time_ms (int): Tiempo de procesamiento en milisegundos
+          - error (str | None): Mensaje de error si ocurrió alguno
+        
+        Raises:
+            No lanza excepciones, retorna error en el diccionario si falla
         """
         if not self.is_configured or not self.textract_client:
             logger.warning("Textract not configured. Returning default classification.")
@@ -150,7 +172,25 @@ class TextractService:
             }
     
     def _analyze_from_s3(self, bucket: str, key: str, use_forms: bool = False) -> Dict[str, Any]:
-        """Analyze document from S3."""
+        """
+        Analiza un documento desde S3 usando AWS Textract.
+        
+        ¿Qué hace la función?
+        Llama a AWS Textract para analizar un documento que ya está almacenado en S3.
+        Puede usar detección simple de texto o análisis avanzado con FORMS y TABLES
+        según el parámetro use_forms.
+        
+        ¿Qué parámetros recibe y de qué tipo?
+        - bucket (str): Nombre del bucket S3 donde está el documento
+        - key (str): Clave S3 (ruta) del documento
+        - use_forms (bool): Si es True, usa analyze_document con FORMS y TABLES; si es False, usa detect_document_text (default: False)
+        
+        ¿Qué dato regresa y de qué tipo?
+        - Dict[str, Any]: Respuesta de AWS Textract con bloques de texto y metadatos
+        
+        Raises:
+            ClientError: Si hay un error al comunicarse con AWS Textract
+        """
         if use_forms:
             # Use analyze_document for forms and tables extraction
             response = self.textract_client.analyze_document(
@@ -175,7 +215,24 @@ class TextractService:
         return response
     
     def _analyze_from_bytes(self, file_content: bytes, use_forms: bool = False) -> Dict[str, Any]:
-        """Analyze document from bytes."""
+        """
+        Analiza un documento desde bytes usando AWS Textract.
+        
+        ¿Qué hace la función?
+        Llama a AWS Textract para analizar un documento enviado como bytes en memoria.
+        Puede usar detección simple de texto o análisis avanzado con FORMS y TABLES
+        según el parámetro use_forms. Útil para archivos pequeños que no están en S3.
+        
+        ¿Qué parámetros recibe y de qué tipo?
+        - file_content (bytes): Contenido del archivo en bytes
+        - use_forms (bool): Si es True, usa analyze_document con FORMS y TABLES; si es False, usa detect_document_text (default: False)
+        
+        ¿Qué dato regresa y de qué tipo?
+        - Dict[str, Any]: Respuesta de AWS Textract con bloques de texto y metadatos
+        
+        Raises:
+            ClientError: Si hay un error al comunicarse con AWS Textract
+        """
         if use_forms:
             # Use analyze_document for forms and tables extraction
             response = self.textract_client.analyze_document(
@@ -194,7 +251,19 @@ class TextractService:
         return response
     
     def _extract_text_from_response(self, response: Dict[str, Any]) -> str:
-        """Extract text from Textract response."""
+        """
+        Extrae texto de la respuesta de AWS Textract.
+        
+        ¿Qué hace la función?
+        Procesa la respuesta de AWS Textract y extrae todas las líneas de texto
+        encontradas en el documento, uniéndolas en un solo string.
+        
+        ¿Qué parámetros recibe y de qué tipo?
+        - response (Dict[str, Any]): Respuesta de AWS Textract con bloques de texto
+        
+        ¿Qué dato regresa y de qué tipo?
+        - str: Texto extraído del documento, unido con espacios
+        """
         text_blocks = []
         
         if 'Blocks' in response:
@@ -212,13 +281,19 @@ class TextractService:
     
     def _classify_document(self, text: str) -> str:
         """
-        Classify document as FACTURA or INFORMACIÓN based on content.
+        Clasifica un documento como FACTURA o INFORMACIÓN basándose en el contenido.
         
-        Args:
-            text: Extracted text from document
-            
-        Returns:
-            "FACTURA" or "INFORMACIÓN"
+        ¿Qué hace la función?
+        Analiza el texto extraído del documento buscando keywords específicas
+        categorizadas por importancia (críticas, importantes, secundarias).
+        Usa un sistema de puntuación ponderado y reglas estrictas para determinar
+        si el documento es una FACTURA o INFORMACIÓN, evitando falsos positivos.
+        
+        ¿Qué parámetros recibe y de qué tipo?
+        - text (str): Texto extraído del documento a clasificar
+        
+        ¿Qué dato regresa y de qué tipo?
+        - str: Clasificación del documento ("FACTURA" o "INFORMACIÓN")
         """
         if not text or not text.strip():
             logger.warning("Empty text extracted, classifying as INFORMACIÓN")
@@ -325,16 +400,27 @@ class TextractService:
         raw_text: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Extract structured data from an invoice document.
+        Extrae datos estructurados de un documento de factura.
         
-        Args:
-            file: Document file
-            s3_key: S3 key if file is in S3
-            s3_bucket: S3 bucket name
-            raw_text: Previously extracted text (optional, to avoid re-extraction)
-            
-        Returns:
-            Dictionary with extracted invoice data
+        ¿Qué hace la función?
+        Analiza un documento de factura usando AWS Textract con FORMS y TABLES
+        para extraer datos estructurados como cliente, proveedor, número de factura,
+        productos, totales, etc. Usa InvoiceParser para procesar la respuesta.
+        
+        ¿Qué parámetros recibe y de qué tipo?
+        - file (UploadFile): Archivo del documento de factura
+        - s3_key (str | None): Clave S3 si el archivo ya está en S3 (opcional, mejora rendimiento)
+        - s3_bucket (str | None): Nombre del bucket S3 (opcional, requerido si s3_key está presente)
+        - raw_text (str | None): Texto previamente extraído (opcional, evita re-extracción)
+        
+        ¿Qué dato regresa y de qué tipo?
+        - Dict[str, Any]: Diccionario con datos estructurados de la factura:
+          - cliente: Diccionario con nombre, dirección, RFC
+          - proveedor: Diccionario con nombre, dirección, RFC
+          - numero_factura: Número de factura
+          - fecha: Fecha de la factura
+          - productos: Lista de productos con cantidad, nombre, precio, total
+          - subtotal, iva, total: Totales de la factura
         """
         if not self.is_configured or not self.textract_client:
             logger.warning("Textract not configured. Cannot extract invoice data.")
@@ -454,14 +540,19 @@ class TextractService:
     
     def _calculate_confidence(self, response: Dict[str, Any], classification: str) -> float:
         """
-        Calculate confidence score for classification.
+        Calcula la puntuación de confianza para la clasificación.
         
-        Args:
-            response: Textract response
-            classification: Classification result
-            
-        Returns:
-            Confidence score (0-100)
+        ¿Qué hace la función?
+        Calcula una puntuación de confianza basada en el número de bloques de texto
+        encontrados en la respuesta de Textract. Más bloques indican mayor confianza
+        en que el documento fue procesado correctamente.
+        
+        ¿Qué parámetros recibe y de qué tipo?
+        - response (Dict[str, Any]): Respuesta de AWS Textract con bloques
+        - classification (str): Resultado de la clasificación ("FACTURA" o "INFORMACIÓN")
+        
+        ¿Qué dato regresa y de qué tipo?
+        - float: Puntuación de confianza entre 0.0 y 100.0
         """
         if 'Blocks' not in response or not response['Blocks']:
             return 0.0

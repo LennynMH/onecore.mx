@@ -27,7 +27,19 @@ class HistoryUseCases:
     """History use cases."""
     
     def __init__(self, document_repository: DocumentRepository):
-        """Initialize use cases with repository."""
+        """
+        Inicializa los casos de uso con el repositorio de documentos.
+        
+        ¿Qué hace la función?
+        Configura el repositorio de documentos para realizar operaciones
+        de consulta y exportación del historial.
+        
+        ¿Qué parámetros recibe y de qué tipo?
+        - document_repository (DocumentRepository): Repositorio de documentos
+        
+        ¿Qué dato regresa y de qué tipo?
+        - None
+        """
         self.document_repository = document_repository
     
     async def get_history(
@@ -43,21 +55,35 @@ class HistoryUseCases:
         page_size: int = 50
     ) -> Dict[str, Any]:
         """
-        Get history with filters and pagination.
+        Obtiene el historial de eventos con filtros y paginación.
         
-        Args:
-            event_type: Filter by event type
-            document_id: Filter by document ID
-            user_id: Filter by user ID
-            classification: Filter by document classification
-            date_from: Filter events from this date
-            date_to: Filter events to this date
-            description_search: Search in event description
-            page: Page number
-            page_size: Items per page
-            
-        Returns:
-            Dictionary with events and pagination info
+        ¿Qué hace la función?
+        Consulta el historial de eventos desde la base de datos aplicando
+        filtros opcionales (tipo de evento, documento, usuario, clasificación,
+        rango de fechas, búsqueda en descripción) y retorna los resultados
+        paginados con información de totales y páginas.
+        
+        ¿Qué parámetros recibe y de qué tipo?
+        - event_type (str | None): Filtro por tipo de evento (DOCUMENT_UPLOAD, AI_PROCESSING, USER_INTERACTION)
+        - document_id (int | None): Filtro por ID de documento específico
+        - user_id (int | None): Filtro por ID de usuario
+        - classification (str | None): Filtro por clasificación de documento (FACTURA, INFORMACIÓN)
+        - date_from (datetime | None): Filtro por fecha desde (incluida)
+        - date_to (datetime | None): Filtro por fecha hasta (incluida)
+        - description_search (str | None): Búsqueda de texto en descripción del evento
+        - page (int): Número de página (default: 1, mínimo: 1)
+        - page_size (int): Items por página (default: 50, máximo: 100)
+        
+        ¿Qué dato regresa y de qué tipo?
+        - Dict[str, Any]: Diccionario con:
+          - events (List[Dict]): Lista de eventos encontrados
+          - total (int): Total de eventos que cumplen los filtros
+          - page (int): Página actual
+          - page_size (int): Tamaño de página usado
+          - total_pages (int): Total de páginas disponibles
+        
+        Raises:
+            Exception: Si ocurre un error al consultar el historial
         """
         try:
             result = await self.document_repository.list_events(
