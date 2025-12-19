@@ -16,15 +16,21 @@ class AuthUseCases:
     
     async def login_anonymous_user(self, rol: str = None) -> Dict[str, Any]:
         """
-        Login anonymous user and generate JWT token.
+        Inicia sesión de usuario anónimo y genera token JWT.
         
-        Creates or gets an anonymous session from database and generates JWT token.
+        ¿Qué hace la función?
+        Crea o obtiene una sesión anónima de la base de datos y genera un token JWT
+        con los datos del usuario. Si no se proporciona un rol, usa "gestor" por defecto.
         
-        Args:
-            rol: Optional role name. If not provided, defaults to "gestor"
+        ¿Qué parámetros recibe y de qué tipo?
+        - rol (str | None): Nombre del rol del usuario. Opcional. Si es None, se usa "gestor".
         
-        Returns:
-            Dictionary with token and user information
+        ¿Qué dato regresa y de qué tipo?
+        - Dict[str, Any]: Diccionario con las siguientes claves:
+            - access_token (str): Token JWT generado
+            - token_type (str): Tipo de token, siempre "bearer"
+            - expires_in (int): Tiempo de expiración en segundos
+            - user (Dict[str, Any]): Datos del usuario con id_usuario (int) y rol (str)
         """
         # Use provided role or default to "gestor"
         role_to_use = rol if rol else "gestor"
@@ -60,13 +66,25 @@ class AuthUseCases:
     @staticmethod
     async def renew_token(token: str) -> Dict[str, Any]:
         """
-        Renew JWT token.
+        Renueva un token JWT existente.
         
-        Args:
-            token: Current JWT token
-            
-        Returns:
-            Dictionary with new token
+        ¿Qué hace la función?
+        Decodifica el token JWT actual, extrae los datos del usuario y genera un nuevo
+        token con tiempo de expiración adicional. Solo funciona si el token original
+        aún no ha expirado.
+        
+        ¿Qué parámetros recibe y de qué tipo?
+        - token (str): Token JWT actual que se desea renovar. Debe ser válido y no expirado.
+        
+        ¿Qué dato regresa y de qué tipo?
+        - Dict[str, Any]: Diccionario con las siguientes claves:
+            - access_token (str): Nuevo token JWT generado
+            - token_type (str): Tipo de token, siempre "bearer"
+            - expires_in (int): Tiempo de expiración en segundos del nuevo token
+            - user (Dict[str, Any]): Datos del usuario con id_usuario (int) y rol (str)
+        
+        Raises:
+            Exception: Si el token es inválido o ha expirado.
         """
         # Decode current token to get user data
         payload = decode_token(token)
