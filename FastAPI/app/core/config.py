@@ -66,6 +66,10 @@ class Settings(BaseSettings):
     
     # Configuración AWS Textract
     aws_textract_enabled: bool = Field(default=True, json_schema_extra={"env": "AWS_TEXTRACT_ENABLED"})
+    
+    # Configuración OpenAI (opcional, para análisis de sentimiento)
+    openai_api_key: str | None = Field(default=None, json_schema_extra={"env": "OPENAI_API_KEY"})
+    openai_enabled: bool = Field(default=False, json_schema_extra={"env": "OPENAI_ENABLED"})
 
     # Configuración CORS
     cors_origins: str | None = Field(default="*", json_schema_extra={"env": "CORS_ORIGINS"})

@@ -11,6 +11,7 @@ from app.interfaces.dependencies.auth_dependencies import require_role
 from app.application.use_cases.document_upload_use_cases import DocumentUploadUseCases
 from app.infrastructure.s3.s3_service import S3Service
 from app.infrastructure.ai.textract_service import TextractService
+from app.infrastructure.ai.openai_service import OpenAIService
 from app.infrastructure.repositories.document_repository import DocumentRepositoryImpl
 from app.infrastructure.database.sql_server import SQLServerService
 from app.domain.entities.document import Document
@@ -22,9 +23,10 @@ def get_document_upload_use_case() -> DocumentUploadUseCases:
     """Dependency to get document upload use case."""
     s3_service = S3Service()
     textract_service = TextractService()
+    openai_service = OpenAIService()
     db_service = SQLServerService()
     document_repository = DocumentRepositoryImpl(db_service)
-    return DocumentUploadUseCases(s3_service, document_repository, textract_service)
+    return DocumentUploadUseCases(s3_service, document_repository, textract_service, openai_service)
 
 
 @router.post("/upload", response_model=DocumentUploadResponse)

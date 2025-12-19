@@ -10,6 +10,7 @@ from app.domain.entities.document import Document, Event
 from app.domain.repositories.document_repository import DocumentRepository
 from app.infrastructure.s3.s3_service import S3Service
 from app.infrastructure.ai.textract_service import TextractService
+from app.infrastructure.ai.openai_service import OpenAIService
 
 logger = logging.getLogger(__name__)
 
@@ -21,12 +22,14 @@ class DocumentUploadUseCases:
         self,
         s3_service: S3Service,
         document_repository: DocumentRepository,
-        textract_service: Optional[TextractService] = None
+        textract_service: Optional[TextractService] = None,
+        openai_service: Optional[OpenAIService] = None
     ):
         """Initialize use cases with services."""
         self.s3_service = s3_service
         self.document_repository = document_repository
         self.textract_service = textract_service or TextractService()
+        self.openai_service = openai_service
     
     @staticmethod
     def _generate_unique_filename(original_filename: str) -> str:
@@ -191,6 +194,77 @@ class DocumentUploadUseCases:
                 except Exception as e:
                     logger.warning(f"Failed to register AI_PROCESSING event: {str(e)}")
             
+            # FASE 3: Extract structured data based on classification
+            extracted_data = None
+            try:
+                from app.core.config import settings
+                raw_text = analysis_result.get("raw_text") if analysis_result else None
+                
+                if classification == "FACTURA":
+                    logger.info("Extracting invoice data...")
+                    # Reset file pointer for extraction
+                    await file.seek(0)
+                    invoice_data = await self.textract_service.extract_invoice_data(
+                        file=file,
+                        s3_key=s3_key,
+                        s3_bucket=s3_bucket,
+                        raw_text=raw_text
+                    )
+                    
+                    if invoice_data:
+                        # Save extracted data to database
+                        await self.document_repository.save_extracted_data(
+                            document_id=document.id,
+                            data_type="INVOICE",
+                            extracted_data=invoice_data
+                        )
+                        extracted_data = invoice_data
+                        logger.info(f"Invoice data extracted and saved: {len(invoice_data)} fields")
+                
+                elif classification == "INFORMACIÓN":
+                    logger.info("Extracting information data...")
+                    # Reset file pointer for extraction
+                    await file.seek(0)
+                    information_data = await self.textract_service.extract_information_data(
+                        file=file,
+                        s3_key=s3_key,
+                        s3_bucket=s3_bucket,
+                        raw_text=raw_text
+                    )
+                    
+                    # Use OpenAI for sentiment analysis if available
+                    if self.openai_service and information_data.get("resumen"):
+                        try:
+                            from app.core.config import settings
+                            if settings.openai_enabled:
+                                logger.info("Analyzing sentiment with OpenAI...")
+                                sentiment = await self.openai_service.analyze_sentiment(
+                                    information_data.get("resumen", "")
+                                )
+                                information_data["sentimiento"] = sentiment
+                                
+                                # Generate better summary if OpenAI is available
+                                if raw_text:
+                                    summary = await self.openai_service.generate_summary(raw_text)
+                                    if summary:
+                                        information_data["resumen"] = summary
+                        except Exception as e:
+                            logger.warning(f"Error using OpenAI for sentiment analysis: {str(e)}")
+                    
+                    if information_data:
+                        # Save extracted data to database
+                        await self.document_repository.save_extracted_data(
+                            document_id=document.id,
+                            data_type="INFORMATION",
+                            extracted_data=information_data
+                        )
+                        extracted_data = information_data
+                        logger.info(f"Information data extracted and saved: {len(information_data)} fields")
+                
+            except Exception as e:
+                logger.warning(f"Error during data extraction: {str(e)}. Continuing without extracted data.")
+                # Don't fail the upload if extraction fails
+            
             return {
                 "success": True,
                 "message": "Document uploaded successfully to S3 and database",
@@ -200,7 +274,7 @@ class DocumentUploadUseCases:
                 "s3_key": document.s3_key,
                 "s3_bucket": document.s3_bucket,
                 "classification": document.classification,
-                "extracted_data": None,  # Will be populated in FASE 3
+                "extracted_data": extracted_data,  # FASE 3: Datos extraídos
                 "processing_time_ms": processing_time_ms
             }
             
