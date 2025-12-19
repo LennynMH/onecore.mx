@@ -51,18 +51,24 @@ class SQLServerService:
             # Create table if not exists
             self._create_file_data_table(cursor)
             
-            # Insert file metadata
+            # Determine if file has errors
+            has_errors = 1 if metadata.validation_errors and len(metadata.validation_errors) > 0 else 0
+            error_count = len(metadata.validation_errors) if metadata.validation_errors else 0
+            
+            # Insert file metadata (including has_errors and error_count)
             cursor.execute("""
-                INSERT INTO file_uploads (filename, s3_key, s3_bucket, uploaded_by, uploaded_at, row_count)
+                INSERT INTO file_uploads (filename, s3_key, s3_bucket, uploaded_by, uploaded_at, row_count, has_errors, error_count)
                 OUTPUT INSERTED.id
-                VALUES (?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 metadata.filename,
                 metadata.s3_key,
                 metadata.s3_bucket,
                 metadata.uploaded_by,
                 datetime.utcnow(),
-                len(file_data)
+                len(file_data),
+                has_errors,
+                error_count
             ))
             
             file_id = cursor.fetchone()[0]
@@ -77,8 +83,12 @@ class SQLServerService:
                         VALUES (?, ?)
                     """, (file_id, row_json))
             
+            # Insert validation errors if any
+            if metadata.validation_errors and len(metadata.validation_errors) > 0:
+                self._save_validation_errors(cursor, file_id, metadata.validation_errors)
+            
             conn.commit()
-            logger.info(f"File data saved to database. File ID: {file_id}, Rows: {len(file_data)}")
+            logger.info(f"File data saved to database. File ID: {file_id}, Rows: {len(file_data)}, Errors: {error_count}")
             return True
             
         except Exception as e:
@@ -106,6 +116,8 @@ class SQLServerService:
                     uploaded_by INT,
                     uploaded_at DATETIME2 NOT NULL,
                     row_count INT,
+                    has_errors BIT DEFAULT 0,
+                    error_count INT DEFAULT 0,
                     created_at DATETIME2 DEFAULT GETDATE()
                 )
             """)
@@ -125,6 +137,31 @@ class SQLServerService:
         except Exception as e:
             logger.warning(f"Error creating tables (may already exist): {str(e)}")
     
+    def _save_validation_errors(self, cursor, file_id: int, validation_errors: List[Dict[str, Any]]):
+        """
+        Save validation errors to database.
+        
+        Args:
+            cursor: Database cursor
+            file_id: File ID
+            validation_errors: List of validation error dictionaries
+        """
+        try:
+            for error in validation_errors:
+                cursor.execute("""
+                    INSERT INTO file_validation_errors (file_id, error_type, field_name, error_message, row_number)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (
+                    file_id,
+                    error.get("type", "unknown"),
+                    error.get("field"),
+                    error.get("message", ""),
+                    error.get("row")
+                ))
+        except Exception as e:
+            logger.warning(f"Error saving validation errors (table may not exist yet): {str(e)}")
+            # Don't fail the whole transaction if errors table doesn't exist
+    
     async def get_file_metadata(self, file_id: int) -> Optional[FileUpload]:
         """Get file metadata by ID."""
         conn = None
@@ -134,7 +171,7 @@ class SQLServerService:
             cursor = conn.cursor()
             
             cursor.execute("""
-                SELECT id, filename, s3_key, s3_bucket, uploaded_by, uploaded_at, row_count
+                SELECT id, filename, s3_key, s3_bucket, uploaded_by, uploaded_at, row_count, has_errors, error_count
                 FROM file_uploads
                 WHERE id = ?
             """, (file_id,))

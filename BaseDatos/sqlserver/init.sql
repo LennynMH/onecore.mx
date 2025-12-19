@@ -77,6 +77,8 @@ BEGIN
         uploaded_by INT,
         uploaded_at DATETIME2 NOT NULL,
         row_count INT,
+        has_errors BIT DEFAULT 0,
+        error_count INT DEFAULT 0,
         created_at DATETIME2 DEFAULT GETDATE()
     );
     PRINT 'Tabla file_uploads creada exitosamente';
@@ -125,6 +127,11 @@ BEGIN
     CREATE INDEX idx_file_uploads_filename ON file_uploads (filename);
 END
 
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'idx_file_uploads_has_errors' AND object_id = OBJECT_ID('file_uploads'))
+BEGIN
+    CREATE INDEX idx_file_uploads_has_errors ON file_uploads (has_errors);
+END
+
 -- Ãndices en file_data
 IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'idx_file_data_file_id' AND object_id = OBJECT_ID('file_data'))
 BEGIN
@@ -134,6 +141,38 @@ END
 IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'idx_file_data_created_at' AND object_id = OBJECT_ID('file_data'))
 BEGIN
     CREATE INDEX idx_file_data_created_at ON file_data (created_at);
+END
+
+-- Tabla para errores de validación
+IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'file_validation_errors')
+BEGIN
+    CREATE TABLE file_validation_errors (
+        id INT IDENTITY(1,1) PRIMARY KEY,
+        file_id INT NOT NULL,
+        error_type NVARCHAR(50) NOT NULL,
+        field_name NVARCHAR(255),
+        error_message NVARCHAR(500) NOT NULL,
+        row_number INT,
+        created_at DATETIME2 DEFAULT GETDATE(),
+        FOREIGN KEY (file_id) REFERENCES file_uploads(id) ON DELETE CASCADE
+    );
+    PRINT 'Tabla file_validation_errors creada exitosamente';
+END
+ELSE
+BEGIN
+    PRINT 'La tabla file_validation_errors ya existe';
+END
+GO
+
+-- Índices para file_validation_errors
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'idx_file_validation_errors_file_id' AND object_id = OBJECT_ID('file_validation_errors'))
+BEGIN
+    CREATE INDEX idx_file_validation_errors_file_id ON file_validation_errors(file_id);
+END
+
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'idx_file_validation_errors_type' AND object_id = OBJECT_ID('file_validation_errors'))
+BEGIN
+    CREATE INDEX idx_file_validation_errors_type ON file_validation_errors(error_type);
 END
 
 -- =====================================================
@@ -172,9 +211,7 @@ BEGIN
         VALUES
             -- 1 usuario con rol admin
             (NEWID(), GETDATE(), GETDATE(), @admin_rol_id, 0),
-            -- 4 usuarios con rol gestor
-            (NEWID(), GETDATE(), GETDATE(), @gestor_rol_id, 0),
-            (NEWID(), GETDATE(), GETDATE(), @gestor_rol_id, 0),
+            -- 2 usuarios con rol gestor
             (NEWID(), GETDATE(), GETDATE(), @gestor_rol_id, 0),
             (NEWID(), GETDATE(), GETDATE(), @gestor_rol_id, 0);
         
@@ -226,6 +263,135 @@ ELSE
 BEGIN
     PRINT 'Ya existen datos en la base de datos';
 END
+GO
+
+-- =====================================================
+-- Tablas para Módulo de Análisis de Documentos (EVALUACION_TECNICA_V2)
+-- =====================================================
+
+-- Tabla documents: Almacena metadatos de documentos subidos
+IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'documents')
+BEGIN
+    CREATE TABLE documents (
+        id INT IDENTITY(1,1) PRIMARY KEY,
+        filename NVARCHAR(255) NOT NULL,
+        original_filename NVARCHAR(255) NOT NULL,
+        file_type NVARCHAR(50) NOT NULL, -- PDF, JPG, PNG
+        s3_key NVARCHAR(500),
+        s3_bucket NVARCHAR(255),
+        classification NVARCHAR(50), -- FACTURA, INFORMACIÓN, NULL si no procesado
+        uploaded_by INT NOT NULL,
+        uploaded_at DATETIME2 DEFAULT GETDATE(),
+        processed_at DATETIME2,
+        file_size BIGINT,
+        FOREIGN KEY (uploaded_by) REFERENCES anonymous_sessions(id) ON DELETE CASCADE
+    );
+    PRINT 'Tabla documents creada exitosamente';
+END
+ELSE
+BEGIN
+    PRINT 'La tabla documents ya existe';
+END
+GO
+
+-- Tabla document_extracted_data: Almacena datos extraídos de documentos
+IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'document_extracted_data')
+BEGIN
+    CREATE TABLE document_extracted_data (
+        id INT IDENTITY(1,1) PRIMARY KEY,
+        document_id INT NOT NULL,
+        data_type NVARCHAR(50) NOT NULL, -- INVOICE, INFORMATION
+        extracted_data NVARCHAR(MAX) NOT NULL, -- JSON con datos extraídos
+        created_at DATETIME2 DEFAULT GETDATE(),
+        FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
+    );
+    PRINT 'Tabla document_extracted_data creada exitosamente';
+END
+ELSE
+BEGIN
+    PRINT 'La tabla document_extracted_data ya existe';
+END
+GO
+
+-- Tabla events: Registro de eventos para módulo histórico
+IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'events')
+BEGIN
+    CREATE TABLE events (
+        id INT IDENTITY(1,1) PRIMARY KEY,
+        event_type NVARCHAR(50) NOT NULL, -- DOCUMENT_UPLOAD, AI_PROCESSING, USER_INTERACTION
+        description NVARCHAR(MAX),
+        document_id INT,
+        user_id INT,
+        created_at DATETIME2 DEFAULT GETDATE(),
+        FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE SET NULL,
+        FOREIGN KEY (user_id) REFERENCES anonymous_sessions(id) ON DELETE SET NULL
+    );
+    PRINT 'Tabla events creada exitosamente';
+END
+ELSE
+BEGIN
+    PRINT 'La tabla events ya existe';
+END
+GO
+
+-- =====================================================
+-- Índices para optimización de consultas
+-- =====================================================
+
+-- Índices en documents
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'idx_documents_uploaded_by' AND object_id = OBJECT_ID('documents'))
+BEGIN
+    CREATE INDEX idx_documents_uploaded_by ON documents (uploaded_by);
+END
+
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'idx_documents_classification' AND object_id = OBJECT_ID('documents'))
+BEGIN
+    CREATE INDEX idx_documents_classification ON documents (classification);
+END
+
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'idx_documents_uploaded_at' AND object_id = OBJECT_ID('documents'))
+BEGIN
+    CREATE INDEX idx_documents_uploaded_at ON documents (uploaded_at);
+END
+
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'idx_documents_file_type' AND object_id = OBJECT_ID('documents'))
+BEGIN
+    CREATE INDEX idx_documents_file_type ON documents (file_type);
+END
+
+-- Índices en document_extracted_data
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'idx_document_extracted_data_document_id' AND object_id = OBJECT_ID('document_extracted_data'))
+BEGIN
+    CREATE INDEX idx_document_extracted_data_document_id ON document_extracted_data (document_id);
+END
+
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'idx_document_extracted_data_data_type' AND object_id = OBJECT_ID('document_extracted_data'))
+BEGIN
+    CREATE INDEX idx_document_extracted_data_data_type ON document_extracted_data (data_type);
+END
+
+-- Índices en events
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'idx_events_type' AND object_id = OBJECT_ID('events'))
+BEGIN
+    CREATE INDEX idx_events_type ON events (event_type);
+END
+
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'idx_events_created_at' AND object_id = OBJECT_ID('events'))
+BEGIN
+    CREATE INDEX idx_events_created_at ON events (created_at);
+END
+
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'idx_events_document_id' AND object_id = OBJECT_ID('events'))
+BEGIN
+    CREATE INDEX idx_events_document_id ON events (document_id);
+END
+
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'idx_events_user_id' AND object_id = OBJECT_ID('events'))
+BEGIN
+    CREATE INDEX idx_events_user_id ON events (user_id);
+END
+
+PRINT 'Índices para módulo de documentos creados exitosamente';
 GO
 
 PRINT 'Script de inicializaciÃ³n completado';

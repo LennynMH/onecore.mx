@@ -3,6 +3,7 @@
 import csv
 import io
 import logging
+import os
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from fastapi import UploadFile
@@ -26,6 +27,31 @@ class FileUploadUseCases:
         """Initialize use case with services."""
         self.s3_service = s3_service
         self.file_repository = file_repository
+    
+    @staticmethod
+    def _generate_unique_filename(original_filename: str) -> str:
+        """
+        Generate unique filename with timestamp to avoid duplicates.
+        
+        Format: nombre_archivo_ddmmyyyyhhmmss.extension
+        Example: test.csv -> test_18122025201153.csv
+        
+        Args:
+            original_filename: Original filename from upload
+            
+        Returns:
+            Filename with timestamp suffix
+        """
+        # Get file name and extension
+        name, ext = os.path.splitext(original_filename)
+        
+        # Generate timestamp: ddmmyyyyhhmmss
+        timestamp = datetime.utcnow().strftime('%d%m%Y%H%M%S')
+        
+        # Combine: nombre_timestamp.extension
+        unique_filename = f"{name}_{timestamp}{ext}"
+        
+        return unique_filename
     
     async def upload_and_validate_file(
         self,
@@ -63,11 +89,13 @@ class FileUploadUseCases:
             
             # Convert to list of dictionaries
             file_data = []
-            row_number = 1
+            row_number = 0  # Empezar en 0, luego incrementar antes de procesar cada fila
             seen_rows = []  # Para detectar duplicados
             
             for row in csv_reader:
-                row_number += 1
+                row_number += 1  # Incrementar antes de procesar (primera fila de datos = 1)
+                # row_number ahora representa el número de fila de datos (1, 2, 3, ...)
+                # No incluye el header en la numeración
                 row_data = dict(row)
                 
                 # Add additional parameters to each row
@@ -91,18 +119,22 @@ class FileUploadUseCases:
                     file_data.append(row_data)
             
             # Validate file structure
-            if row_number == 1:
+            if row_number == 0:
                 validation_errors.append({
                     "type": "file_structure",
                     "message": "File is empty or has no data rows",
                     "row": None
                 })
             
+            # Generate unique filename with timestamp to avoid duplicates
+            unique_filename = self._generate_unique_filename(file.filename)
+            
             # Try to upload to S3 (optional - will continue even if it fails)
             s3_key = None
             s3_bucket = None
             try:
-                s3_key_path = f"uploads/{datetime.utcnow().strftime('%Y/%m/%d')}/{file.filename}"
+                # Use unique filename in S3 path
+                s3_key_path = f"uploads/{datetime.utcnow().strftime('%Y/%m/%d')}/{unique_filename}"
                 s3_key = await self.s3_service.upload_file(file, s3_key_path)
                 if s3_key:
                     s3_bucket = settings.aws_s3_bucket_name
@@ -114,9 +146,9 @@ class FileUploadUseCases:
                 s3_key = None
                 s3_bucket = None
             
-            # Create file metadata
+            # Create file metadata (use unique_filename instead of original filename)
             metadata = FileUpload(
-                filename=file.filename,
+                filename=unique_filename,  # Use unique filename with timestamp
                 s3_key=s3_key,
                 s3_bucket=s3_bucket,
                 uploaded_by=user_id,
@@ -137,7 +169,8 @@ class FileUploadUseCases:
             return {
                 "success": True,
                 "message": message,
-                "filename": file.filename,
+                "filename": unique_filename,  # Return unique filename with timestamp
+                "original_filename": file.filename,  # Keep original for reference
                 "s3_key": s3_key,
                 "s3_bucket": s3_bucket,
                 "rows_processed": len(file_data),
@@ -267,7 +300,7 @@ class FileUploadUseCases:
                 errors.append({
                     "type": "duplicate",
                     "field": None,
-                    "message": f"Duplicate row detected. Row {row_number} is identical to row {idx + 2}",
+                    "message": f"Duplicate row detected. Row {row_number} is identical to row {idx + 1}",
                     "row": row_number
                 })
                 break  # Solo reportar el primer duplicado encontrado

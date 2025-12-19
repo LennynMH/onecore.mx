@@ -86,6 +86,25 @@ services:
       - onecore_network
     command: python main.py
 
+  frontend:
+    build:
+      context: ./FrontEnd
+      dockerfile: Dockerfile
+    container_name: onecore_frontend_dev
+    environment:
+      # URL del API backend (usando el nombre del servicio Docker)
+      VITE_API_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./FrontEnd:/app
+      - /app/node_modules
+    depends_on:
+      - api
+    restart: unless-stopped
+    networks:
+      - onecore_network
+
 volumes:
   sqlserver_data_dev:
     driver: local

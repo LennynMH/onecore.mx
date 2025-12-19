@@ -47,8 +47,13 @@ El proyecto fue desarrollado como evaluación técnica para OneCore Virtual Core
 ### Backend (FastAPI)
 - ✅ **Autenticación JWT** con renovación de tokens
 - ✅ **Carga de archivos CSV** con validación completa
+- ✅ **Carga de documentos** (PDF, JPG, PNG) con almacenamiento en S3 y BD
+- ✅ **APIs de documentos** con filtros, paginación y búsqueda
 - ✅ **Integración con AWS S3** para almacenamiento
 - ✅ **Integración con SQL Server** para persistencia
+- ✅ **Sistema de validación mejorado** con tracking de errores en BD
+- ✅ **Nombres únicos de archivos** con timestamp para evitar duplicados
+- ✅ **Registro de eventos** para módulo histórico
 - ✅ **Arquitectura limpia** (Clean Architecture)
 - ✅ **Middleware de autenticación** y manejo de errores
 - ✅ **Logging estructurado**
@@ -458,6 +463,35 @@ curl -X POST http://localhost:8000/api/v1/files/upload \
   -F "param2=value2"
 ```
 
+**Respuesta:**
+```json
+{
+  "success": true,
+  "message": "File uploaded successfully to S3 and database",
+  "filename": "data_18122025201153.csv",
+  "original_filename": "data.csv",
+  "s3_key": "uploads/2025/12/18/data_18122025201153.csv",
+  "s3_bucket": "onecore-uploads-dev",
+  "rows_processed": 100,
+  "validation_errors": [
+    {
+      "type": "empty_value",
+      "field": "email",
+      "message": "Empty value in field 'email'",
+      "row": 5
+    }
+  ],
+  "param1": "value1",
+  "param2": "value2"
+}
+```
+
+**Características:**
+- ✅ **Nombres únicos:** El archivo se guarda con timestamp (`_ddmmyyyyhhmmss`) para evitar duplicados
+- ✅ **Validación completa:** Detecta valores vacíos, tipos incorrectos y duplicados
+- ✅ **Tracking de errores:** Los errores se guardan en `file_validation_errors` para consulta posterior
+- ✅ **Metadatos:** `has_errors` y `error_count` en `file_uploads` para identificación rápida
+
 ### 3. Renovar Token
 
 **Endpoint:** `POST /api/v1/auth/renew`
@@ -467,7 +501,55 @@ curl -X POST http://localhost:8000/api/v1/auth/renew \
   -H "Authorization: Bearer <token>"
 ```
 
-### 4. Usar Swagger UI
+### 4. Subir Documento (PDF, JPG, PNG)
+
+**Endpoint:** `POST /api/v1/documents/upload`
+
+```bash
+curl -X POST http://localhost:8000/api/v1/documents/upload \
+  -H "Authorization: Bearer <token>" \
+  -F "file=@documento.pdf"
+```
+
+**Respuesta:**
+```json
+{
+  "success": true,
+  "message": "Document uploaded successfully to S3 and database",
+  "document_id": 1,
+  "filename": "documento_18122025201153.pdf",
+  "original_filename": "documento.pdf",
+  "s3_key": "documents/2025/12/18/documento_18122025201153.pdf",
+  "s3_bucket": "onecore-uploads-dev",
+  "classification": null,
+  "extracted_data": null
+}
+```
+
+### 5. Listar Documentos
+
+**Endpoint:** `GET /api/v1/documents`
+
+```bash
+# Listar todos
+curl -X GET "http://localhost:8000/api/v1/documents?page=1&limit=20" \
+  -H "Authorization: Bearer <token>"
+
+# Con filtros
+curl -X GET "http://localhost:8000/api/v1/documents?classification=FACTURA&date_from=2025-12-01" \
+  -H "Authorization: Bearer <token>"
+```
+
+### 6. Obtener Documento por ID
+
+**Endpoint:** `GET /api/v1/documents/{id}`
+
+```bash
+curl -X GET "http://localhost:8000/api/v1/documents/1" \
+  -H "Authorization: Bearer <token>"
+```
+
+### 7. Usar Swagger UI
 
 Accede a http://localhost:8000/docs para probar los endpoints interactivamente.
 
@@ -495,13 +577,22 @@ Accede a http://localhost:8000/docs para probar los endpoints interactivamente.
 | GET | `/health` | Estado de la API | No |
 | GET | `/` | Información de la API | No |
 
-### Documentos (Planificado)
+### Documentos
 
-| Método | Endpoint | Descripción | Estado |
-|--------|----------|-------------|--------|
-| POST | `/api/v1/documents/upload` | Subir documento (PDF/JPG/PNG) | 🚧 Planificado |
-| GET | `/api/v1/documents/{id}` | Obtener documento | 🚧 Planificado |
-| GET | `/api/v1/documents` | Listar documentos | 🚧 Planificado |
+| Método | Endpoint | Descripción | Autenticación |
+|--------|----------|-------------|---------------|
+| POST | `/api/v1/documents/upload` | Subir documento (PDF/JPG/PNG) | Sí (rol: admin) |
+| GET | `/api/v1/documents` | Listar documentos con filtros | Sí (rol: admin) |
+| GET | `/api/v1/documents/{id}` | Obtener documento por ID | Sí (rol: admin) |
+
+**Características:**
+- ✅ Subida a AWS S3 y Base de Datos
+- ✅ Nombres únicos con timestamp
+- ✅ Filtros por clasificación y rango de fechas
+- ✅ Paginación
+- ✅ Registro de eventos automático
+- 🚧 Clasificación automática (FASE 2 - En desarrollo)
+- 🚧 Extracción de datos (FASE 3 - En desarrollo)
 
 ---
 
@@ -519,10 +610,36 @@ Sesiones de usuarios anónimos con sus roles asignados.
 Metadatos de archivos CSV subidos:
 - `id`, `filename`, `s3_key`, `s3_bucket`
 - `uploaded_by`, `uploaded_at`, `row_count`
+- `has_errors` (BIT): Indica si el archivo tiene errores de validación
+- `error_count` (INT): Número total de errores de validación
 
 #### `file_data`
 Datos de archivos CSV procesados:
 - `id`, `file_id`, `row_data` (JSON), `created_at`
+
+#### `file_validation_errors`
+Errores de validación detallados:
+- `id`, `file_id`, `error_type`, `field_name`
+- `error_message`, `row_number`, `created_at`
+- Permite consultar errores específicos por archivo, tipo o fila
+
+#### `documents` (Nuevo - FASE 1)
+Metadatos de documentos subidos (PDF, JPG, PNG):
+- `id`, `filename`, `original_filename`, `file_type`
+- `s3_key`, `s3_bucket`, `classification` (FACTURA/INFORMACIÓN)
+- `uploaded_by`, `uploaded_at`, `processed_at`, `file_size`
+
+#### `document_extracted_data` (Nuevo - FASE 1)
+Datos extraídos de documentos:
+- `id`, `document_id`, `data_type` (INVOICE/INFORMATION)
+- `extracted_data` (JSON), `created_at`
+- Almacena datos estructurados según tipo de documento
+
+#### `events` (Nuevo - FASE 1)
+Registro de eventos para módulo histórico:
+- `id`, `event_type` (DOCUMENT_UPLOAD, AI_PROCESSING, USER_INTERACTION)
+- `description`, `document_id`, `user_id`, `created_at`
+- Permite tracking completo de actividades del sistema
 
 ### Scripts de Inicialización
 
@@ -630,6 +747,39 @@ docker-compose -f docker-compose.production.yml up -d
 
 ---
 
+## 🆕 Mejoras Recientes
+
+### Módulo de Documentos (FASE 1) - NUEVO
+
+- ✅ **APIs de Documentos:** 3 nuevos endpoints para subir, listar y obtener documentos
+- ✅ **Soporte múltiples formatos:** PDF, JPG, PNG
+- ✅ **Almacenamiento dual:** S3 y Base de Datos
+- ✅ **Nombres únicos:** Timestamp automático para evitar duplicados
+- ✅ **Filtros avanzados:** Por clasificación y rango de fechas
+- ✅ **Paginación:** Control de resultados con page y limit
+- ✅ **Registro de eventos:** Tracking automático de actividades
+
+### Sistema de Validación Mejorado
+
+- ✅ **Tracking de errores en BD:** Los errores de validación se guardan en la tabla `file_validation_errors` para consulta posterior
+- ✅ **Campos de metadatos:** `has_errors` (BIT) y `error_count` (INT) en `file_uploads` para identificación rápida de archivos con problemas
+- ✅ **Números de fila correctos:** El campo `row_number` ahora refleja correctamente el número de fila de datos (excluyendo el header)
+
+### Nombres Únicos de Archivos
+
+- ✅ **Timestamp automático:** Los archivos se guardan con un sufijo `_ddmmyyyyhhmmss` para evitar duplicados
+- ✅ **Ejemplo:** `data.csv` → `data_18122025201153.csv`
+- ✅ **Preservación del nombre original:** El campo `original_filename` mantiene el nombre original del archivo
+
+### Base de Datos Mejorada
+
+- ✅ **Tabla `file_validation_errors`:** Almacena errores detallados con tipo, campo, mensaje y número de fila
+- ✅ **Tablas de documentos:** `documents`, `document_extracted_data`, `events` para módulo de análisis
+- ✅ **Índices optimizados:** Índices en `has_errors`, `error_count` y tablas de documentos para consultas rápidas
+- ✅ **Relaciones:** Foreign keys con `ON DELETE CASCADE` para mantener integridad
+
+---
+
 ## 📊 Estado del Proyecto
 
 ### ✅ Implementado
@@ -638,23 +788,31 @@ docker-compose -f docker-compose.production.yml up -d
 - [x] Carga y validación de archivos CSV
 - [x] Integración con AWS S3
 - [x] Integración con SQL Server
+- [x] Sistema de validación mejorado con tracking de errores
+- [x] Nombres únicos de archivos con timestamp
+- [x] Tabla de errores de validación (`file_validation_errors`)
+- [x] Campos `has_errors` y `error_count` en `file_uploads`
+- [x] **Módulo de Documentos (FASE 1):** APIs para subir, listar y obtener documentos
+- [x] **Tablas de documentos:** `documents`, `document_extracted_data`, `events`
 - [x] Arquitectura limpia y modular
 - [x] Docker Compose para desarrollo y producción
 - [x] Frontend React con autenticación
 - [x] Middleware de autenticación y manejo de errores
 - [x] Logging estructurado
 - [x] Documentación Swagger/OpenAPI
+- [x] Colección Postman completa con tests automatizados
 
 ### 🚧 En Desarrollo / Planificado
 
-- [ ] Módulo de análisis de documentos con IA
-  - [ ] Carga de documentos (PDF, JPG, PNG)
-  - [ ] Clasificación automática (FACTURA/INFORMACIÓN)
-  - [ ] Extracción de datos con AWS Textract
-  - [ ] Análisis de sentimiento con OpenAI
-- [ ] Historial completo de documentos
-  - [ ] Filtros avanzados (tipo, fecha, descripción)
-  - [ ] Exportación a Excel
+- [ ] Módulo de análisis de documentos con IA (FASE 2-4)
+  - [x] Carga de documentos (PDF, JPG, PNG) ✅ FASE 1
+  - [ ] Clasificación automática (FACTURA/INFORMACIÓN) 🚧 FASE 2
+  - [ ] Extracción de datos con AWS Textract 🚧 FASE 3
+  - [ ] Análisis de sentimiento con OpenAI 🚧 FASE 3
+- [ ] Historial completo de documentos (FASE 4)
+  - [x] Filtros básicos (tipo, fecha) ✅ FASE 1
+  - [ ] Filtro por descripción 🚧 FASE 4
+  - [ ] Exportación a Excel 🚧 FASE 4
 - [ ] Procesamiento asíncrono de documentos
 - [ ] Integración completa con servicios de IA
 
@@ -662,25 +820,28 @@ docker-compose -f docker-compose.production.yml up -d
 
 ## 🎯 Próximos Pasos
 
-### Fase 1: Infraestructura Base
-- [ ] Crear tablas para documentos en SQL Server
-- [ ] Implementar servicio de upload para PDF/JPG/PNG
-- [ ] Validaciones básicas (tipo, tamaño)
-- [ ] Integración con S3 para documentos
+### ✅ Fase 1: Infraestructura Base - COMPLETA
+- [x] Crear tablas para documentos en SQL Server
+- [x] Implementar servicio de upload para PDF/JPG/PNG
+- [x] Validaciones básicas (tipo, tamaño)
+- [x] Integración con S3 para documentos
+- [x] Endpoints de listado y obtención de documentos
+- [x] Filtros básicos y paginación
 
-### Fase 2: Clasificación
+### 🚧 Fase 2: Clasificación - EN DESARROLLO
 - [ ] Integrar AWS Textract
-- [ ] Implementar clasificación básica
-- [ ] Endpoint de upload con clasificación
+- [ ] Implementar clasificación básica (FACTURA/INFORMACIÓN)
+- [ ] Modificar endpoint de upload para incluir clasificación
 
-### Fase 3: Extracción de Datos
+### 🚧 Fase 3: Extracción de Datos - PENDIENTE
 - [ ] Parser de facturas con Textract
 - [ ] Extracción de campos clave
 - [ ] Guardado estructurado en BD
 - [ ] Análisis de sentimiento con OpenAI
 
-### Fase 4: Historial y Filtros
-- [ ] Endpoint de listado con filtros
+### 🚧 Fase 4: Historial y Filtros - PENDIENTE
+- [x] Endpoint de listado con filtros básicos ✅
+- [ ] Filtro por descripción (búsqueda de texto)
 - [ ] Exportación a Excel
 - [ ] Mejoras en UI del historial
 

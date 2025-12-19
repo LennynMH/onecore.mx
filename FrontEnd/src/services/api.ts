@@ -21,10 +21,11 @@ export interface DocumentUploadResponse {
   message: string;
   document_id?: number;
   filename: string;
-  classification: 'FACTURA' | 'INFORMACIÓN';
+  original_filename?: string;
+  classification?: 'FACTURA' | 'INFORMACIÓN' | null;
   s3_key?: string;
   s3_bucket?: string;
-  extracted_data: InvoiceData | InformationData;
+  extracted_data?: InvoiceData | InformationData | null;
   processing_time_ms?: number;
 }
 
@@ -59,11 +60,15 @@ export interface InformationData {
 export interface Document {
   id: number;
   filename: string;
+  original_filename?: string;
   file_type: string;
-  classification: 'FACTURA' | 'INFORMACIÓN';
+  classification?: 'FACTURA' | 'INFORMACIÓN' | null;
   uploaded_at: string;
-  processed_at?: string;
-  extracted_data: InvoiceData | InformationData;
+  processed_at?: string | null;
+  extracted_data?: InvoiceData | InformationData | null;
+  s3_key?: string | null;
+  s3_bucket?: string | null;
+  file_size?: number | null;
 }
 
 export interface DocumentsListResponse {

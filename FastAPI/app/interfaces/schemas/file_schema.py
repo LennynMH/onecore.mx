@@ -28,7 +28,8 @@ class FileUploadResponse(BaseModel):
     
     success: bool
     message: str
-    filename: str
+    filename: str  # Unique filename with timestamp
+    original_filename: Optional[str] = None  # Original filename from upload
     s3_key: Optional[str] = None
     s3_bucket: Optional[str] = None
     rows_processed: int

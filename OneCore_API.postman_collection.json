@@ -1,8 +1,8 @@
 {
 	"info": {
 		"_postman_id": "onecore-api-collection",
-		"name": "OneCore API",
-		"description": "Colección de APIs para OneCore - FastAPI Application\n\nIncluye:\n- Autenticación JWT\n- Carga de archivos CSV\n- Validación de datos\n- Integración con AWS S3 y SQL Server",
+		"name": "OneCore API - Evaluación Técnica",
+		"description": "Colección completa de APIs para OneCore según EVALUACION_TECNICA.txt y EVALUACION_TECNICA_V2.txt\n\n**PARTE 1: APIs (EVALUACION_TECNICA.txt)**\n\n1. ✅ API de Inicio de Sesión (Session Login API)\n   - Endpoint para usuarios anónimos\n   - JWT firmado con id_usuario y rol\n   - Expiración de 15 minutos\n\n2. ✅ API de Carga y Validación de Archivos (File Upload and Validation API)\n   - Subida a AWS S3\n   - Almacenamiento en SQL Server\n   - Validación (valores vacíos, tipos incorrectos, duplicados)\n   - Control de acceso por rol con JWT\n\n3. ✅ API de Renovación de Token (Token Renewal API)\n   - Renueva JWT con tiempo adicional\n   - Solo si el token original no ha expirado\n\n**PARTE 2: Módulos Web (EVALUACION_TECNICA_V2.txt) - FASE 1**\n\n4. ✅ API de Documentos (FASE 1 - Infraestructura Base)\n   - POST /api/v1/documents/upload - Subir documentos (PDF, JPG, PNG)\n   - GET /api/v1/documents - Listar documentos con filtros\n   - GET /api/v1/documents/{id} - Obtener documento por ID\n   - 🚧 FASE 2: Clasificación automática (En desarrollo)\n   - 🚧 FASE 3: Extracción de datos (En desarrollo)",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
 		"_exporter_id": "onecore-api"
 	},
@@ -50,10 +50,7 @@
 			"description": "Endpoints públicos sin autenticación"
 		},
 		{
-			"name": "Authentication",
-			"item": [
-				{
-					"name": "Login (Anonymous)",
+			"name": "1. API de Inicio de Sesión",
 					"item": [
 						{
 							"name": "Login - Sin rol (default gestor)",
@@ -65,8 +62,29 @@
 											"if (pm.response.code === 200) {",
 											"    var jsonData = pm.response.json();",
 											"    pm.environment.set(\"access_token\", jsonData.access_token);",
-											"    console.log(\"Token guardado: \" + jsonData.access_token);",
-											"    console.log(\"Usuario: \" + JSON.stringify(jsonData.user));",
+									"    pm.environment.set(\"user_id\", jsonData.user.id_usuario);",
+									"    pm.environment.set(\"user_rol\", jsonData.user.rol);",
+									"    console.log(\"✅ Token guardado en variable de entorno\");",
+									"    console.log(\"Usuario ID: \" + jsonData.user.id_usuario);",
+									"    console.log(\"Rol: \" + jsonData.user.rol);",
+									"    console.log(\"Expira en: \" + jsonData.expires_in + \" segundos\");",
+									"    ",
+									"    // Validar estructura del JWT",
+									"    pm.test(\"Token contiene id_usuario\", function() {",
+									"        pm.expect(jsonData.user).to.have.property(\"id_usuario\");",
+									"    });",
+									"    ",
+									"    pm.test(\"Token contiene rol\", function() {",
+									"        pm.expect(jsonData.user).to.have.property(\"rol\");",
+									"    });",
+									"    ",
+									"    pm.test(\"Token type es bearer\", function() {",
+									"        pm.expect(jsonData.token_type).to.eql(\"bearer\");",
+									"    });",
+									"    ",
+									"    pm.test(\"Expiración es 15 minutos (900 segundos)\", function() {",
+									"        pm.expect(jsonData.expires_in).to.eql(900);",
+									"    });",
 											"}"
 										],
 										"type": "text/javascript"
@@ -102,7 +120,7 @@
 										"login"
 									]
 								},
-								"description": "Login sin especificar rol. Por defecto se asigna el rol \"gestor\".\n\nEl body puede ser `{}` o `null`."
+						"description": "**REQUISITO 1: API DE INICIO DE SESIÓN**\n\nEndpoint que permite a usuarios anónimos iniciar sesión.\n\n**Características:**\n- ✅ Devuelve JWT firmado\n- ✅ JWT contiene: `id_usuario` (user_id)\n- ✅ JWT contiene: `rol` (role)\n- ✅ Tiempo de expiración: **15 minutos** (900 segundos)\n\n**Body opcional:**\n- Puede enviarse `{}` o `null`\n- Si no se especifica rol, por defecto es `\"gestor\"`\n\n**Respuesta:**\n```json\n{\n    \"access_token\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...\",\n    \"token_type\": \"bearer\",\n    \"expires_in\": 900,\n    \"user\": {\n        \"id_usuario\": 1,\n        \"rol\": \"gestor\"\n    }\n}\n```\n\n**Nota:** El token se guarda automáticamente en la variable de entorno `access_token`"
 							},
 							"response": []
 						},
@@ -116,8 +134,13 @@
 											"if (pm.response.code === 200) {",
 											"    var jsonData = pm.response.json();",
 											"    pm.environment.set(\"access_token\", jsonData.access_token);",
-											"    console.log(\"Token guardado: \" + jsonData.access_token);",
-											"    console.log(\"Usuario: \" + JSON.stringify(jsonData.user));",
+									"    pm.environment.set(\"user_id\", jsonData.user.id_usuario);",
+									"    pm.environment.set(\"user_rol\", jsonData.user.rol);",
+									"    console.log(\"✅ Token guardado (rol admin)\");",
+									"    ",
+									"    pm.test(\"Rol es admin\", function() {",
+									"        pm.expect(jsonData.user.rol).to.eql(\"admin\");",
+									"    });",
 											"}"
 										],
 										"type": "text/javascript"
@@ -153,7 +176,7 @@
 										"login"
 									]
 								},
-								"description": "Login con rol \"admin\".\n\nAsigna una sesión anónima con permisos de administrador."
+						"description": "Login con rol **admin**.\n\n**Importante:** El rol `admin` es necesario para acceder al endpoint de carga de archivos CSV."
 							},
 							"response": []
 						},
@@ -167,8 +190,9 @@
 											"if (pm.response.code === 200) {",
 											"    var jsonData = pm.response.json();",
 											"    pm.environment.set(\"access_token\", jsonData.access_token);",
-											"    console.log(\"Token guardado: \" + jsonData.access_token);",
-											"    console.log(\"Usuario: \" + JSON.stringify(jsonData.user));",
+									"    pm.environment.set(\"user_id\", jsonData.user.id_usuario);",
+									"    pm.environment.set(\"user_rol\", jsonData.user.rol);",
+									"    console.log(\"✅ Token guardado (rol gestor)\");",
 											"}"
 										],
 										"type": "text/javascript"
@@ -204,22 +228,172 @@
 										"login"
 									]
 								},
-								"description": "Login con rol \"gestor\" (explícito).\n\nEquivalente a no enviar el parámetro rol, pero de forma explícita."
-							},
-							"response": []
+						"description": "Login con rol **gestor** (explícito).\n\nEquivalente a no enviar el parámetro rol."
+					},
+					"response": []
+				}
+			],
+			"description": "**REQUISITO 1: API DE INICIO DE SESIÓN (Session Login API)**\n\nImplementa un endpoint que permita a usuarios anónimos iniciar sesión.\n\n**Requisitos cumplidos:**\n- ✅ Endpoint para usuarios anónimos\n- ✅ Devuelve JWT firmado\n- ✅ JWT contiene: `id_usuario` (user_id)\n- ✅ JWT contiene: `rol` (role)\n- ✅ Tiempo de expiración de **15 minutos**"
+		},
+		{
+			"name": "2. API de Carga y Validación de Archivos",
+			"item": [
+				{
+					"name": "Upload CSV File",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    var jsonData = pm.response.json();",
+									"    ",
+									"    pm.test(\"Upload exitoso\", function() {",
+									"        pm.expect(jsonData.success).to.be.true;",
+									"    });",
+									"    ",
+									"    pm.test(\"Contiene filename (con timestamp)\", function() {",
+									"        pm.expect(jsonData).to.have.property(\"filename\");",
+									"        // El filename debe incluir timestamp para evitar duplicados",
+									"    });",
+									"    ",
+									"    pm.test(\"Contiene original_filename\", function() {",
+									"        pm.expect(jsonData).to.have.property(\"original_filename\");",
+									"    });",
+									"    ",
+									"    pm.test(\"Contiene rows_processed\", function() {",
+									"        pm.expect(jsonData).to.have.property(\"rows_processed\");",
+									"    });",
+									"    ",
+									"    pm.test(\"Contiene validation_errors\", function() {",
+									"        pm.expect(jsonData).to.have.property(\"validation_errors\");",
+									"        pm.expect(jsonData.validation_errors).to.be.an(\"array\");",
+									"    });",
+									"    ",
+									"    pm.test(\"Contiene param1 y param2\", function() {",
+									"        pm.expect(jsonData).to.have.property(\"param1\");",
+									"        pm.expect(jsonData).to.have.property(\"param2\");",
+									"    });",
+									"    ",
+									"    if (jsonData.validation_errors.length > 0) {",
+									"        console.log(\"⚠️ Errores de validación encontrados:\");",
+									"        jsonData.validation_errors.forEach(function(error) {",
+									"            console.log(\"  - \" + error.type + \": \" + error.message);",
+									"        });",
+									"    } else {",
+									"        console.log(\"✅ Archivo validado sin errores\");",
+									"    }",
+									"    ",
+									"    if (jsonData.s3_key) {",
+									"        console.log(\"✅ Archivo subido a S3: \" + jsonData.s3_key);",
+									"    } else {",
+									"        console.log(\"⚠️ S3 no configurado, archivo guardado solo en BD\");",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
 						}
 					],
-					"description": "Inicio de sesión para usuarios anónimos.\n\n**Parámetros (opcionales):**\n- `rol`: Rol del usuario (\"admin\" o \"gestor\"). Si no se proporciona, por defecto es \"gestor\"\n- El body es completamente opcional (puede enviarse `null` o `{}`)\n\n**Funcionalidad:**\n- Crea o reutiliza una sesión anónima desde la base de datos\n- Asigna el rol especificado o \"gestor\" por defecto\n- Devuelve un JWT token con:\n  - `id_usuario`: ID de la sesión anónima desde la base de datos\n  - `rol`: Rol asignado (\"admin\" o \"gestor\")\n  - Expiración: 15 minutos\n\n**Nota:** El token se guarda automáticamente en la variable de entorno 'access_token'"
-				},
-				{
-					"name": "Renew Token",
 					"request": {
 						"method": "POST",
 						"header": [
 							{
 								"key": "Authorization",
 								"value": "Bearer {{access_token}}",
-								"type": "text"
+								"type": "text",
+								"description": "JWT token obtenido del endpoint de login"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": [],
+									"description": "Archivo CSV a subir. Debe ser formato CSV válido."
+								},
+								{
+									"key": "param1",
+									"value": "value1",
+									"type": "text",
+									"description": "Primer parámetro adicional (obligatorio)"
+								},
+								{
+									"key": "param2",
+									"value": "value2",
+									"type": "text",
+									"description": "Segundo parámetro adicional (obligatorio)"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/files/upload",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"files",
+								"upload"
+							]
+						},
+						"description": "**REQUISITO 2: API DE CARGA Y VALIDACIÓN DE ARCHIVOS**\n\nEndpoint para subir un archivo CSV junto con dos parámetros adicionales.\n\n**REQUISITOS DEL ENDPOINT:**\n\n**a) Subida a AWS S3:** ✅\n- El archivo se almacena en un bucket configurado\n- Ruta: `uploads/YYYY/MM/DD/filename_timestamp.csv`\n- **Nombres únicos:** Se agrega timestamp `_ddmmyyyyhhmmss` al nombre para evitar duplicados\n- Si S3 no está configurado, el archivo se guarda solo en la base de datos\n\n**b) Almacenamiento en SQL Server:** ✅\n- El contenido del archivo se procesa y guarda en la base de datos\n- Metadatos en tabla `file_uploads` (incluye `has_errors` y `error_count`)\n- Datos de cada fila en tabla `file_data` (como JSON)\n- Errores de validación en tabla `file_validation_errors`\n\n**c) Validación:** ✅\n- Devuelve una lista con las validaciones aplicadas al archivo:\n  - **Valores vacíos:** Detecta campos vacíos en cualquier fila\n  - **Tipos incorrectos:** Valida formato de emails, números, fechas\n  - **Duplicados:** Detecta filas duplicadas\n- Los errores se guardan en BD para consulta posterior\n\n**d) Control de acceso:** ✅\n- El acceso está limitado a usuarios con rol específico (por defecto: `admin`)\n- Valida el token JWT en el header `Authorization`\n- Si el usuario no tiene el rol requerido, retorna 403 Forbidden\n\n**Ejemplo de respuesta exitosa:**\n```json\n{\n    \"success\": true,\n    \"message\": \"File uploaded successfully to S3 and database\",\n    \"filename\": \"data_18122025201153.csv\",\n    \"original_filename\": \"data.csv\",\n    \"s3_key\": \"uploads/2025/12/18/data_18122025201153.csv\",\n    \"s3_bucket\": \"onecore-uploads-dev\",\n    \"rows_processed\": 100,\n    \"validation_errors\": [],\n    \"param1\": \"value1\",\n    \"param2\": \"value2\"\n}\n```\n\n**Ejemplo de respuesta con errores de validación:**\n```json\n{\n    \"success\": true,\n    \"message\": \"File uploaded successfully to S3 and database\",\n    \"filename\": \"data_18122025201153.csv\",\n    \"original_filename\": \"data.csv\",\n    \"s3_key\": \"uploads/2025/12/18/data_18122025201153.csv\",\n    \"s3_bucket\": \"onecore-uploads-dev\",\n    \"rows_processed\": 95,\n    \"validation_errors\": [\n        {\n            \"type\": \"empty_value\",\n            \"field\": \"email\",\n            \"message\": \"Empty value in field 'email'\",\n            \"row\": 5\n        },\n        {\n            \"type\": \"incorrect_type\",\n            \"field\": \"age\",\n            \"message\": \"Invalid number format in field 'age': 'abc'\",\n            \"row\": 10\n        },\n        {\n            \"type\": \"duplicate\",\n            \"field\": null,\n            \"message\": \"Duplicate row detected. Row 15 is identical to row 8\",\n            \"row\": 15\n        }\n    ],\n    \"param1\": \"value1\",\n    \"param2\": \"value2\"\n}\n```\n\n**Mejoras implementadas:**\n- ✅ **Nombres únicos:** `filename` incluye timestamp para evitar duplicados\n- ✅ **Tracking de errores:** Errores guardados en `file_validation_errors`\n- ✅ **Metadatos mejorados:** `has_errors` y `error_count` en `file_uploads`\n- ✅ **Nombre original:** `original_filename` preserva el nombre original del archivo\n\n**Nota:** Asegúrate de hacer login con rol `admin` antes de usar este endpoint."
+					},
+					"response": []
+				}
+			],
+			"description": "**REQUISITO 2: API DE CARGA Y VALIDACIÓN DE ARCHIVOS (File Upload and Validation API)**\n\nEndpoint para subir un archivo CSV junto con dos parámetros adicionales.\n\n**Requisitos cumplidos:**\n- ✅ **a) Subida a AWS S3:** El archivo se almacena en un bucket configurado con nombres únicos (timestamp)\n- ✅ **b) Almacenamiento en SQL Server:** El contenido se procesa y guarda en la base de datos con tracking de errores\n- ✅ **c) Validación:** Devuelve lista con validaciones (valores vacíos, tipos incorrectos, duplicados)\n- ✅ **d) Control de acceso:** Limitado a usuarios con rol específico, validando el token JWT\n\n**Mejoras adicionales:**\n- ✅ Nombres únicos de archivos con timestamp (`_ddmmyyyyhhmmss`)\n- ✅ Sistema de tracking de errores en BD (`file_validation_errors`)\n- ✅ Campos `has_errors` y `error_count` en `file_uploads`"
+		},
+		{
+			"name": "3. API de Renovación de Token",
+			"item": [
+				{
+					"name": "Renew Token",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    var jsonData = pm.response.json();",
+									"    pm.environment.set(\"access_token\", jsonData.access_token);",
+									"    console.log(\"✅ Token renovado exitosamente\");",
+									"    console.log(\"Nuevo tiempo de expiración: \" + jsonData.expires_in + \" segundos\");",
+									"    ",
+									"    pm.test(\"Token renovado\", function() {",
+									"        pm.expect(jsonData).to.have.property(\"access_token\");",
+									"        pm.expect(jsonData.access_token).to.not.be.empty;",
+									"    });",
+									"    ",
+									"    pm.test(\"Token type es bearer\", function() {",
+									"        pm.expect(jsonData.token_type).to.eql(\"bearer\");",
+									"    });",
+									"    ",
+									"    pm.test(\"Contiene información de usuario\", function() {",
+									"        pm.expect(jsonData).to.have.property(\"user\");",
+									"        pm.expect(jsonData.user).to.have.property(\"id_usuario\");",
+									"        pm.expect(jsonData.user).to.have.property(\"rol\");",
+									"    });",
+									"} else if (pm.response.code === 401) {",
+									"    console.log(\"❌ Error: Token expirado o inválido\");",
+									"    console.log(\"Debes hacer login nuevamente\");",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text",
+								"description": "JWT token actual (debe estar vigente, no expirado)"
 							},
 							{
 								"key": "Content-Type",
@@ -238,25 +412,67 @@
 								"renew"
 							]
 						},
-						"description": "Renueva un JWT token existente.\n\nRequisitos:\n- El token original no debe haber expirado\n- Debe enviarse en el header Authorization\n\nGenera un nuevo token con tiempo de expiración adicional (30 minutos por defecto)"
+						"description": "**REQUISITO 3: API DE RENOVACIÓN DE TOKEN (Token Renewal API)**\n\nImplementa un endpoint para renovar el JWT, generando un nuevo token con un tiempo de expiración adicional.\n\n**Requisitos cumplidos:**\n- ✅ Endpoint para renovar el JWT\n- ✅ Genera un nuevo token con tiempo de expiración adicional (30 minutos por defecto)\n- ✅ **Solo puede ser accedido si el token original aún no ha expirado**\n\n**Funcionamiento:**\n1. Valida que el token en el header `Authorization` no haya expirado\n2. Si el token es válido, genera un nuevo token con los mismos datos del usuario\n3. El nuevo token tiene un tiempo de expiración adicional (30 minutos por defecto)\n4. Si el token original expiró, retorna error 401 Unauthorized\n\n**Ejemplo de respuesta exitosa:**\n```json\n{\n    \"access_token\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...\",\n    \"token_type\": \"bearer\",\n    \"expires_in\": 1800,\n    \"user\": {\n        \"id_usuario\": 1,\n        \"rol\": \"admin\"\n    }\n}\n```\n\n**Ejemplo de error (token expirado):**\n```json\n{\n    \"detail\": \"Token has expired. Cannot renew expired token.\"\n}\n```\n\n**Nota:** El nuevo token se guarda automáticamente en la variable de entorno `access_token`"
 					},
 					"response": []
 				}
 			],
-			"description": "Endpoints de autenticación JWT"
+			"description": "**REQUISITO 3: API DE RENOVACIÓN DE TOKEN (Token Renewal API)**\n\nImplementa un endpoint para renovar el JWT, generando un nuevo token con un tiempo de expiración adicional.\n\n**Requisitos cumplidos:**\n- ✅ Endpoint para renovar el JWT\n- ✅ Genera un nuevo token con tiempo de expiración adicional\n- ✅ Solo puede ser accedido si el token original aún no ha expirado"
 		},
 		{
-			"name": "File Upload",
+			"name": "4. API de Documentos (FASE 1)",
 			"item": [
 				{
-					"name": "Upload CSV File",
+					"name": "Upload Document",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    var jsonData = pm.response.json();",
+									"    ",
+									"    pm.test(\"Upload exitoso\", function() {",
+									"        pm.expect(jsonData.success).to.be.true;",
+									"    });",
+									"    ",
+									"    pm.test(\"Contiene document_id\", function() {",
+									"        pm.expect(jsonData).to.have.property(\"document_id\");",
+									"    });",
+									"    ",
+									"    pm.test(\"Contiene filename con timestamp\", function() {",
+									"        pm.expect(jsonData).to.have.property(\"filename\");",
+									"        // El filename debe incluir timestamp para evitar duplicados",
+									"    });",
+									"    ",
+									"    pm.test(\"Contiene original_filename\", function() {",
+									"        pm.expect(jsonData).to.have.property(\"original_filename\");",
+									"    });",
+									"    ",
+									"    if (jsonData.document_id) {",
+									"        pm.environment.set(\"last_document_id\", jsonData.document_id);",
+									"        console.log(\"✅ Document ID guardado: \" + jsonData.document_id);",
+									"    }",
+									"    ",
+									"    if (jsonData.s3_key) {",
+									"        console.log(\"✅ Documento subido a S3: \" + jsonData.s3_key);",
+									"    } else {",
+									"        console.log(\"⚠️ S3 no configurado, documento guardado solo en BD\");",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
 					"request": {
 						"method": "POST",
 						"header": [
 							{
 								"key": "Authorization",
 								"value": "Bearer {{access_token}}",
-								"type": "text"
+								"type": "text",
+								"description": "JWT token obtenido del endpoint de login"
 							}
 						],
 						"body": {
@@ -266,40 +482,174 @@
 									"key": "file",
 									"type": "file",
 									"src": [],
-									"description": "Archivo CSV a subir"
-								},
-								{
-									"key": "param1",
-									"value": "value1",
-									"type": "text",
-									"description": "Primer parámetro adicional"
-								},
-								{
-									"key": "param2",
-									"value": "value2",
-									"type": "text",
-									"description": "Segundo parámetro adicional"
+									"description": "Archivo PDF, JPG o PNG a subir. Formatos permitidos: .pdf, .jpg, .jpeg, .png"
 								}
 							]
 						},
 						"url": {
-							"raw": "{{base_url}}/api/v1/files/upload",
+							"raw": "{{base_url}}/api/v1/documents/upload",
 							"host": [
 								"{{base_url}}"
 							],
 							"path": [
 								"api",
 								"v1",
-								"files",
+								"documents",
 								"upload"
 							]
 						},
-						"description": "Sube un archivo CSV con validación.\n\n**Requisitos:**\n- Autenticación JWT requerida\n- Rol requerido: admin (configurable)\n- Archivo debe ser CSV\n- Dos parámetros adicionales obligatorios\n\n**Funcionalidades:**\n- ✅ Subida a AWS S3\n- ✅ Almacenamiento en SQL Server\n- ✅ Validación de archivo (valores vacíos, tipos incorrectos, duplicados)\n- ✅ Control de acceso por rol\n\n**Respuesta incluye:**\n- Estado de éxito/error\n- Nombre del archivo\n- Clave S3\n- Filas procesadas\n- Errores de validación\n- Parámetros enviados"
+						"description": "**FASE 1: API DE CARGA DE DOCUMENTOS**\n\nEndpoint para subir documentos en formato PDF, JPG o PNG.\n\n**Características:**\n- ✅ Valida formato (PDF, JPG, PNG)\n- ✅ Genera nombre único con timestamp (`_ddmmyyyyhhmmss`)\n- ✅ Sube a AWS S3 (si está configurado)\n- ✅ Guarda metadatos en Base de Datos\n- ✅ Registra evento de upload\n\n**Ejemplo de respuesta exitosa:**\n```json\n{\n    \"success\": true,\n    \"message\": \"Document uploaded successfully to S3 and database\",\n    \"document_id\": 1,\n    \"filename\": \"invoice_18122025201153.pdf\",\n    \"original_filename\": \"invoice.pdf\",\n    \"s3_key\": \"documents/2025/12/18/invoice_18122025201153.pdf\",\n    \"s3_bucket\": \"onecore-uploads-dev\",\n    \"classification\": null,\n    \"extracted_data\": null,\n    \"processing_time_ms\": null\n}\n```\n\n**Nota:**\n- El `document_id` se guarda automáticamente en la variable `last_document_id`\n- La clasificación será `null` hasta implementar FASE 2\n- Los datos extraídos serán `null` hasta implementar FASE 3"
+					},
+					"response": []
+				},
+				{
+					"name": "List Documents",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    var jsonData = pm.response.json();",
+									"    ",
+									"    pm.test(\"Listado exitoso\", function() {",
+									"        pm.expect(jsonData).to.have.property(\"total\");",
+									"        pm.expect(jsonData).to.have.property(\"documents\");",
+									"        pm.expect(jsonData.documents).to.be.an(\"array\");",
+									"    });",
+									"    ",
+									"    pm.test(\"Contiene paginación\", function() {",
+									"        pm.expect(jsonData).to.have.property(\"page\");",
+									"        pm.expect(jsonData).to.have.property(\"limit\");",
+									"    });",
+									"    ",
+									"    console.log(\"✅ Total de documentos: \" + jsonData.total);",
+									"    console.log(\"📄 Documentos en esta página: \" + jsonData.documents.length);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text",
+								"description": "JWT token obtenido del endpoint de login"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/documents?page=1&limit=20",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"documents"
+							],
+							"query": [
+								{
+									"key": "page",
+									"value": "1",
+									"description": "Número de página (default: 1)"
+								},
+								{
+									"key": "limit",
+									"value": "20",
+									"description": "Items por página (default: 20, max: 100)"
+								},
+								{
+									"key": "classification",
+									"value": "",
+									"description": "Filtrar por clasificación (FACTURA, INFORMACIÓN)",
+									"disabled": true
+								},
+								{
+									"key": "date_from",
+									"value": "",
+									"description": "Fecha desde (YYYY-MM-DD)",
+									"disabled": true
+								},
+								{
+									"key": "date_to",
+									"value": "",
+									"description": "Fecha hasta (YYYY-MM-DD)",
+									"disabled": true
+								}
+							]
+						},
+						"description": "**FASE 1: API DE LISTADO DE DOCUMENTOS**\n\nEndpoint para listar documentos con filtros y paginación.\n\n**Filtros disponibles:**\n- `classification`: Filtrar por tipo (FACTURA, INFORMACIÓN)\n- `date_from`: Fecha desde (YYYY-MM-DD)\n- `date_to`: Fecha hasta (YYYY-MM-DD)\n- `page`: Número de página (default: 1)\n- `limit`: Items por página (default: 20, max: 100)\n\n**Ejemplo de respuesta:**\n```json\n{\n    \"total\": 50,\n    \"page\": 1,\n    \"limit\": 20,\n    \"documents\": [\n        {\n            \"id\": 1,\n            \"filename\": \"invoice_18122025201153.pdf\",\n            \"original_filename\": \"invoice.pdf\",\n            \"file_type\": \"PDF\",\n            \"classification\": null,\n            \"uploaded_at\": \"2025-12-18T20:11:53\",\n            \"processed_at\": null,\n            \"extracted_data\": null,\n            \"s3_key\": \"documents/2025/12/18/invoice_18122025201153.pdf\",\n            \"s3_bucket\": \"onecore-uploads-dev\",\n            \"file_size\": 245760\n        }\n    ]\n}\n```\n\n**Nota:** Los documentos se ordenan por fecha de upload (más recientes primero)"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Document by ID",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    var jsonData = pm.response.json();",
+									"    ",
+									"    pm.test(\"Documento obtenido\", function() {",
+									"        pm.expect(jsonData).to.have.property(\"id\");",
+									"        pm.expect(jsonData).to.have.property(\"filename\");",
+									"        pm.expect(jsonData).to.have.property(\"file_type\");",
+									"    });",
+									"    ",
+									"    pm.test(\"Contiene metadatos\", function() {",
+									"        pm.expect(jsonData).to.have.property(\"uploaded_at\");",
+									"    });",
+									"    ",
+									"    console.log(\"✅ Documento ID: \" + jsonData.id);",
+									"    console.log(\"📄 Archivo: \" + jsonData.original_filename);",
+									"    if (jsonData.extracted_data) {",
+									"        console.log(\"📊 Datos extraídos disponibles\");",
+									"    } else {",
+									"        console.log(\"⚠️ Datos extraídos aún no disponibles (FASE 3)\");",
+									"    }",
+									"} else if (pm.response.code === 404) {",
+									"    console.log(\"❌ Documento no encontrado\");",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text",
+								"description": "JWT token obtenido del endpoint de login"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/documents/{{last_document_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"documents",
+								"{{last_document_id}}"
+							],
+							"description": "Usa el ID del último documento subido. También puedes usar un ID específico."
+						},
+						"description": "**FASE 1: API DE OBTENER DOCUMENTO POR ID**\n\nEndpoint para obtener un documento específico por su ID.\n\n**Ejemplo de respuesta:**\n```json\n{\n    \"id\": 1,\n    \"filename\": \"invoice_18122025201153.pdf\",\n    \"original_filename\": \"invoice.pdf\",\n    \"file_type\": \"PDF\",\n    \"classification\": null,\n    \"uploaded_at\": \"2025-12-18T20:11:53\",\n    \"processed_at\": null,\n    \"extracted_data\": null,\n    \"s3_key\": \"documents/2025/12/18/invoice_18122025201153.pdf\",\n    \"s3_bucket\": \"onecore-uploads-dev\",\n    \"file_size\": 245760\n}\n```\n\n**Nota:**\n- Usa `{{last_document_id}}` para obtener el último documento subido\n- O reemplaza con un ID específico\n- Retorna 404 si el documento no existe"
 					},
 					"response": []
 				}
 			],
-			"description": "Endpoints para carga y validación de archivos CSV"
+			"description": "**FASE 1: MÓDULO DE DOCUMENTOS (EVALUACION_TECNICA_V2.txt)**\n\nAPIs para el módulo de análisis de documentos.\n\n**APIs implementadas:**\n- ✅ POST /api/v1/documents/upload - Subir documentos (PDF, JPG, PNG)\n- ✅ GET /api/v1/documents - Listar documentos con filtros\n- ✅ GET /api/v1/documents/{id} - Obtener documento por ID\n\n**Características:**\n- ✅ Subida a S3 y Base de Datos\n- ✅ Nombres únicos con timestamp\n- ✅ Filtros y paginación\n- ✅ Registro de eventos\n\n**Próximas fases:**\n- 🚧 FASE 2: Clasificación automática (FACTURA/INFORMACIÓN)\n- 🚧 FASE 3: Extracción de datos estructurados\n- 🚧 FASE 4: Histórico completo con exportación"
 		}
 	],
 	"event": [
@@ -308,7 +658,11 @@
 			"script": {
 				"type": "text/javascript",
 				"exec": [
-					""
+					"// Pre-request script global",
+					"// Verificar que base_url esté configurado",
+					"if (!pm.environment.get(\"base_url\")) {",
+					"    pm.environment.set(\"base_url\", \"http://localhost:8000\");",
+					"}"
 				]
 			}
 		},
@@ -317,7 +671,8 @@
 			"script": {
 				"type": "text/javascript",
 				"exec": [
-					""
+					"// Test script global",
+					"// Validaciones generales para todas las respuestas"
 				]
 			}
 		}
@@ -326,13 +681,32 @@
 		{
 			"key": "base_url",
 			"value": "http://localhost:8000",
-			"type": "string"
+			"type": "string",
+			"description": "URL base de la API. Por defecto: http://localhost:8000"
 		},
 		{
 			"key": "access_token",
 			"value": "",
-			"type": "string"
+			"type": "string",
+			"description": "JWT token de autenticación. Se actualiza automáticamente al hacer login."
+		},
+		{
+			"key": "user_id",
+			"value": "",
+			"type": "string",
+			"description": "ID del usuario actual. Se actualiza automáticamente al hacer login."
+		},
+		{
+			"key": "user_rol",
+			"value": "",
+			"type": "string",
+			"description": "Rol del usuario actual (admin o gestor). Se actualiza automáticamente al hacer login."
+		},
+		{
+			"key": "last_document_id",
+			"value": "",
+			"type": "string",
+			"description": "ID del último documento subido. Se actualiza automáticamente al subir un documento."
 		}
 	]
 }
-

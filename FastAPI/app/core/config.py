@@ -63,6 +63,9 @@ class Settings(BaseSettings):
     aws_secret_access_key: str | None = Field(default=None, json_schema_extra={"env": "AWS_SECRET_ACCESS_KEY"})
     aws_region: str = Field(default="us-east-1", json_schema_extra={"env": "AWS_REGION"})
     aws_s3_bucket_name: str | None = Field(default=None, json_schema_extra={"env": "AWS_S3_BUCKET_NAME"})
+    
+    # Configuración AWS Textract
+    aws_textract_enabled: bool = Field(default=True, json_schema_extra={"env": "AWS_TEXTRACT_ENABLED"})
 
     # Configuración CORS
     cors_origins: str | None = Field(default="*", json_schema_extra={"env": "CORS_ORIGINS"})
@@ -70,10 +73,47 @@ class Settings(BaseSettings):
         default=True, json_schema_extra={"env": "CORS_ALLOW_CREDENTIALS"}
     )
 
-    # Rol requerido para carga de archivos
-    file_upload_required_role: str = Field(
-        default="admin", json_schema_extra={"env": "FILE_UPLOAD_REQUIRED_ROLE"}
+    # Roles requeridos para carga de archivos (puede ser uno o varios separados por coma)
+    # Compatible con FILE_UPLOAD_REQUIRED_ROLE (singular) para retrocompatibilidad
+    file_upload_required_roles: str = Field(
+        default="admin", 
+        json_schema_extra={"env": "FILE_UPLOAD_REQUIRED_ROLES"}
     )
+    
+    # Mantener compatibilidad hacia atrás con FILE_UPLOAD_REQUIRED_ROLE (singular)
+    file_upload_required_role: str | None = Field(
+        default=None,
+        json_schema_extra={"env": "FILE_UPLOAD_REQUIRED_ROLE"}
+    )
+    
+    @property
+    def file_upload_required_roles_list(self) -> list:
+        """
+        Convert file_upload_required_roles string to list.
+        
+        Soporta:
+        - FILE_UPLOAD_REQUIRED_ROLES (nuevo, plural) - preferido
+        - FILE_UPLOAD_REQUIRED_ROLE (antiguo, singular) - retrocompatibilidad
+        
+        Examples:
+        - "admin" -> ["admin"]
+        - "admin,gestor" -> ["admin", "gestor"]
+        - "admin, gestor" -> ["admin", "gestor"] (espacios removidos)
+        """
+        # Prioridad: FILE_UPLOAD_REQUIRED_ROLES (plural) > FILE_UPLOAD_REQUIRED_ROLE (singular)
+        roles_str = self.file_upload_required_roles or self.file_upload_required_role or "admin"
+        
+        if not roles_str:
+            return ["admin"]  # Default
+        
+        # Split by comma and clean whitespace
+        roles = [
+            role.strip().lower()
+            for role in roles_str.split(",")
+            if role.strip()
+        ]
+        
+        return roles if roles else ["admin"]  # Default if empty
 
     @property
     def cors_origins_list(self) -> list:
