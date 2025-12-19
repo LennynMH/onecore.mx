@@ -19,8 +19,6 @@ from app.interfaces.schemas.document_schema import (
     DocumentsListResponse
 )
 from app.application.use_cases.document_upload_use_cases import DocumentUploadUseCases
-from app.infrastructure.repositories.document_repository import DocumentRepositoryImpl
-from app.infrastructure.database.sql_server import SQLServerService
 from app.interfaces.api.helpers import HTTPHelpers
 
 
@@ -127,10 +125,8 @@ class DocumentController:
             HTTPException: Si hay un error al listar documentos
         """
         try:
-            db_service = SQLServerService()
-            document_repository = DocumentRepositoryImpl(db_service)
-            
-            result = await document_repository.list_documents(
+            # Usar el repositorio del caso de uso directamente
+            result = await self.document_upload_use_case.document_repository.list_documents(
                 user_id=user_id,
                 classification=classification,
                 date_from=date_from,
@@ -189,10 +185,8 @@ class DocumentController:
             HTTPException: Si el documento no existe o hay un error
         """
         try:
-            db_service = SQLServerService()
-            document_repository = DocumentRepositoryImpl(db_service)
-            
-            document = await document_repository.get_document(document_id)
+            # Usar el repositorio del caso de uso directamente
+            document = await self.document_upload_use_case.document_repository.get_document(document_id)
             
             if not document:
                 raise HTTPException(

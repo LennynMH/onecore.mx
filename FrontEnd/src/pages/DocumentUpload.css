@@ -150,6 +150,105 @@
   font-weight: bold;
 }
 
+/* Overlay de bloqueo durante la carga */
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.75);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+  backdrop-filter: blur(4px);
+  animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.loading-content {
+  background: var(--card-bg);
+  border-radius: 1rem;
+  padding: 3rem;
+  text-align: center;
+  max-width: 400px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.spinner {
+  width: 60px;
+  height: 60px;
+  border: 4px solid var(--border-color);
+  border-top-color: var(--primary-color);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 1.5rem;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loading-content h3 {
+  font-size: 1.5rem;
+  margin-bottom: 0.5rem;
+  color: var(--text-primary);
+}
+
+.loading-content p {
+  color: var(--text-secondary);
+  margin-bottom: 1.5rem;
+}
+
+.overlay-progress {
+  margin-top: 1.5rem;
+}
+
+.overlay-progress-bar {
+  width: 100%;
+  height: 8px;
+  background-color: var(--border-color);
+  border-radius: 9999px;
+  overflow: hidden;
+  margin-bottom: 0.75rem;
+}
+
+.overlay-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary-color), #60a5fa);
+  transition: width 0.3s ease;
+  border-radius: 9999px;
+}
+
+.overlay-progress-text {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
 @media (max-width: 768px) {
   .file-actions {
     flex-direction: column;
@@ -157,6 +256,15 @@
 
   .file-actions .btn {
     width: 100%;
+  }
+
+  .loading-content {
+    padding: 2rem;
+    margin: 1rem;
+  }
+
+  .loading-content h3 {
+    font-size: 1.25rem;
   }
 }
 

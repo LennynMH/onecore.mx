@@ -14,7 +14,6 @@ from app.infrastructure.s3.s3_service import S3Service
 from app.infrastructure.ai.textract_service import TextractService
 from app.infrastructure.ai.openai_service import OpenAIService
 from app.infrastructure.repositories.document_repository import DocumentRepositoryImpl
-from app.infrastructure.database.sql_server import SQLServerService
 
 router = APIRouter(tags=["Documents"])
 
@@ -24,8 +23,8 @@ def get_document_controller() -> DocumentController:
     s3_service = S3Service()
     textract_service = TextractService()
     openai_service = OpenAIService()
-    db_service = SQLServerService()
-    document_repository = DocumentRepositoryImpl(db_service)
+    # DocumentRepositoryImpl ahora usa SQLAlchemy y no requiere SQLServerService
+    document_repository = DocumentRepositoryImpl()
     document_upload_use_case = DocumentUploadUseCases(
         s3_service, document_repository, textract_service, openai_service
     )

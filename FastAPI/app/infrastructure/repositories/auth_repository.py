@@ -1,60 +1,64 @@
 """
-Authentication repository implementation.
+Authentication repository implementation using SQLAlchemy.
 
-Refactorización con Auto (Claude/ChatGPT) - PARTE 3.1
+Refactorización con Auto (Claude/ChatGPT) - Migración a SQLAlchemy ORM
 
 ¿Qué hace este módulo?
-Implementa el repositorio de autenticación usando SQL Server.
-Esta refactorización utiliza DatabaseHelper para eliminar código duplicado
-de manejo de conexiones y transacciones.
+Implementa el repositorio de autenticación usando SQLAlchemy ORM en lugar de queries SQL directas.
+Mantiene la misma interfaz que la implementación anterior para compatibilidad.
 
 ¿Qué clases contiene?
-- AuthRepositoryImpl: Implementación del repositorio de autenticación
+- AuthRepositoryImpl: Implementación del repositorio usando SQLAlchemy
 """
 
 import logging
 from typing import Dict, Any, Optional
 from datetime import datetime
+from sqlalchemy.orm import Session
+from sqlalchemy import and_, desc
 
 from app.domain.repositories.auth_repository import AuthRepository
-from app.infrastructure.database.sql_server import SQLServerService
-from app.infrastructure.database.db_helper import DatabaseHelper
+from app.infrastructure.database.database import get_session
+from app.infrastructure.database.models import (
+    Role as RoleModel,
+    AnonymousSession as AnonymousSessionModel
+)
 
 logger = logging.getLogger(__name__)
 
 
 class AuthRepositoryImpl(AuthRepository):
     """
-    Implementación del repositorio de autenticación.
+    Implementación del repositorio de autenticación usando SQLAlchemy.
     
     ¿Qué hace la clase?
-    Proporciona métodos para crear y gestionar sesiones anónimas,
+    Proporciona métodos para crear y gestionar sesiones anónimas usando SQLAlchemy ORM,
     incluyendo reutilización de sesiones inactivas y actualización de actividad.
     """
     
-    def __init__(self, db_service: SQLServerService):
+    def __init__(self, db_service=None):
         """
-        Inicializa el repositorio con el servicio de base de datos.
+        Inicializa el repositorio.
         
         ¿Qué hace la función?
-        Configura el repositorio con el servicio de base de datos y crea
-        un helper para operaciones comunes.
+        Inicializa el repositorio. El parámetro db_service se mantiene para compatibilidad
+        pero no se usa, ya que SQLAlchemy maneja sus propias conexiones.
         
         ¿Qué parámetros recibe y de qué tipo?
-        - db_service (SQLServerService): Servicio de base de datos SQL Server
+        - db_service: Se mantiene para compatibilidad pero no se usa
         
         ¿Qué dato regresa y de qué tipo?
         - None
         """
-        self.db_service = db_service
-        self.db_helper = DatabaseHelper(db_service)
+        # db_service se mantiene para compatibilidad pero no se usa
+        pass
     
     async def create_or_get_anonymous_session(self, rol: str = "gestor") -> Dict[str, Any]:
         """
         Crea una nueva sesión anónima o reutiliza una existente inactiva.
         
         ¿Qué hace la función?
-        Busca primero una sesión inactiva del rol especificado para reutilizarla.
+        Busca primero una sesión inactiva del rol especificado para reutilizarla usando SQLAlchemy ORM.
         Si no encuentra ninguna, crea una nueva sesión con el rol indicado.
         Si el rol no existe, usa el rol por defecto "gestor".
         
@@ -69,83 +73,65 @@ class AuthRepositoryImpl(AuthRepository):
           - created_at: Fecha de creación en formato ISO
         """
         try:
-            with self.db_helper.get_connection() as (conn, cursor):
-                # Primero, obtener o validar el ID del rol
-                cursor.execute("""
-                    SELECT id, nombre FROM roles WHERE nombre = ?
-                """, (rol,))
+            with get_session() as session:
+                # Obtener o validar el ID del rol
+                role = session.query(RoleModel).filter(RoleModel.nombre == rol).first()
                 
-                role_row = cursor.fetchone()
-                
-                if not role_row:
+                if not role:
                     # El rol no existe, usar "gestor" por defecto
                     logger.warning(f"Role '{rol}' not found, using default 'gestor'")
-                    cursor.execute("""
-                        SELECT id, nombre FROM roles WHERE nombre = 'gestor'
-                    """)
-                    role_row = cursor.fetchone()
+                    role = session.query(RoleModel).filter(RoleModel.nombre == "gestor").first()
                     
-                    if not role_row:
+                    if not role:
                         raise Exception("Default role 'gestor' not found in database")
                 
-                rol_id = role_row[0]
-                rol_nombre = role_row[1]
+                rol_id = role.id
+                rol_nombre = role.nombre
                 
                 # Intentar obtener una sesión inactiva primero
-                cursor.execute("""
-                    SELECT TOP 1 s.id, s.session_id, s.created_at, r.nombre
-                    FROM anonymous_sessions s
-                    INNER JOIN roles r ON s.rol_id = r.id
-                    WHERE s.is_active = 0 AND s.rol_id = ?
-                    ORDER BY s.created_at ASC
-                """, (rol_id,))
+                inactive_session = session.query(AnonymousSessionModel).filter(
+                    and_(
+                        AnonymousSessionModel.is_active == False,
+                        AnonymousSessionModel.rol_id == rol_id
+                    )
+                ).order_by(AnonymousSessionModel.created_at.asc()).first()
                 
-                row = cursor.fetchone()
-                
-                if row:
+                if inactive_session:
                     # Reutilizar sesión inactiva existente
-                    session_id = row[0]
-                    session_uuid = row[1]
-                    created_at = row[2]
-                    session_rol = row[3]
+                    inactive_session.is_active = True
+                    inactive_session.last_activity = datetime.utcnow()
                     
-                    # Activar y actualizar actividad
-                    cursor.execute("""
-                        UPDATE anonymous_sessions
-                        SET is_active = 1,
-                            last_activity = GETDATE()
-                        WHERE id = ?
-                    """, (session_id,))
+                    session.commit()
+                    session.refresh(inactive_session)
                     
-                    logger.info(f"Reused anonymous session ID: {session_id} with role: {session_rol}")
+                    logger.info(f"Reused anonymous session ID: {inactive_session.id} with role: {rol_nombre}")
                     
                     return {
-                        "id": session_id,
-                        "session_id": str(session_uuid),
-                        "rol": session_rol,
-                        "created_at": created_at.isoformat() if created_at else None
+                        "id": inactive_session.id,
+                        "session_id": str(inactive_session.session_id) if inactive_session.session_id else None,
+                        "rol": rol_nombre,
+                        "created_at": inactive_session.created_at.isoformat() if inactive_session.created_at else None
                     }
                 else:
                     # Crear nueva sesión con el rol especificado
-                    cursor.execute("""
-                        INSERT INTO anonymous_sessions (rol_id, created_at, last_activity, is_active)
-                        OUTPUT INSERTED.id, INSERTED.session_id, INSERTED.created_at
-                        VALUES (?, GETDATE(), GETDATE(), 1)
-                    """, (rol_id,))
+                    new_session = AnonymousSessionModel(
+                        rol_id=rol_id,
+                        created_at=datetime.utcnow(),
+                        last_activity=datetime.utcnow(),
+                        is_active=True
+                    )
                     
-                    row = cursor.fetchone()
+                    session.add(new_session)
+                    session.commit()
+                    session.refresh(new_session)
                     
-                    session_id = row[0]
-                    session_uuid = row[1]
-                    created_at = row[2]
-                    
-                    logger.info(f"Created new anonymous session ID: {session_id} with role: {rol_nombre}")
+                    logger.info(f"Created new anonymous session ID: {new_session.id} with role: {rol_nombre}")
                     
                     return {
-                        "id": session_id,
-                        "session_id": str(session_uuid),
+                        "id": new_session.id,
+                        "session_id": str(new_session.session_id) if new_session.session_id else None,
                         "rol": rol_nombre,
-                        "created_at": created_at.isoformat() if created_at else None
+                        "created_at": new_session.created_at.isoformat() if new_session.created_at else None
                     }
         except Exception as e:
             logger.error(f"Error creating/getting anonymous session: {str(e)}")
@@ -157,7 +143,7 @@ class AuthRepositoryImpl(AuthRepository):
         
         ¿Qué hace la función?
         Actualiza el campo `last_activity` de una sesión anónima con la fecha
-        y hora actual, indicando que la sesión sigue activa.
+        y hora actual usando SQLAlchemy ORM, indicando que la sesión sigue activa.
         
         ¿Qué parámetros recibe y de qué tipo?
         - session_id (int): ID de la sesión a actualizar
@@ -166,14 +152,18 @@ class AuthRepositoryImpl(AuthRepository):
         - bool: True si la actualización fue exitosa, False en caso contrario
         """
         try:
-            with self.db_helper.get_connection() as (conn, cursor):
-                cursor.execute("""
-                    UPDATE anonymous_sessions
-                    SET last_activity = GETDATE()
-                    WHERE id = ?
-                """, (session_id,))
+            with get_session() as session:
+                db_session = session.query(AnonymousSessionModel).filter(
+                    AnonymousSessionModel.id == session_id
+                ).first()
+                
+                if not db_session:
+                    logger.warning(f"Session with id {session_id} not found")
+                    return False
+                
+                db_session.last_activity = datetime.utcnow()
+                session.commit()
                 return True
         except Exception as e:
             logger.error(f"Error updating session activity: {str(e)}")
             return False
-

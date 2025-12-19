@@ -7,7 +7,6 @@ from app.interfaces.api.controllers.file_controller import FileController
 from app.application.use_cases.file_upload_use_cases import FileUploadUseCases
 from app.infrastructure.s3.s3_service import S3Service
 from app.infrastructure.repositories.file_repository import FileRepositoryImpl
-from app.infrastructure.database.sql_server import SQLServerService
 
 router = APIRouter(tags=["File Upload"])
 
@@ -15,8 +14,8 @@ router = APIRouter(tags=["File Upload"])
 def get_file_controller() -> FileController:
     """Dependency to get file upload controller."""
     s3_service = S3Service()
-    db_service = SQLServerService()
-    file_repository = FileRepositoryImpl(db_service)
+    # FileRepositoryImpl ahora usa SQLAlchemy y no requiere SQLServerService
+    file_repository = FileRepositoryImpl()
     file_upload_use_case = FileUploadUseCases(s3_service, file_repository)
     return FileController(file_upload_use_case)
 

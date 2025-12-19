@@ -9,15 +9,14 @@ from app.interfaces.dependencies.auth_dependencies import get_current_user
 from app.interfaces.api.controllers.history_controller import HistoryController
 from app.application.use_cases.history_use_cases import HistoryUseCases
 from app.infrastructure.repositories.document_repository import DocumentRepositoryImpl
-from app.infrastructure.database.sql_server import SQLServerService
 
 router = APIRouter(tags=["History"])
 
 
 def get_history_controller() -> HistoryController:
     """Dependency to get history controller."""
-    db_service = SQLServerService()
-    document_repository = DocumentRepositoryImpl(db_service)
+    # DocumentRepositoryImpl ahora usa SQLAlchemy y no requiere SQLServerService
+    document_repository = DocumentRepositoryImpl()
     history_use_case = HistoryUseCases(document_repository)
     return HistoryController(history_use_case)
 

@@ -1,61 +1,127 @@
 """
-Document repository implementation.
+Document repository implementation using SQLAlchemy.
 
-Refactorización con Auto (Claude/ChatGPT) - PARTE 3.1
+Refactorización con Auto (Claude/ChatGPT) - Migración a SQLAlchemy ORM
 
 ¿Qué hace este módulo?
-Implementa el repositorio de documentos usando SQL Server.
-Esta refactorización utiliza DatabaseHelper para eliminar código duplicado
-de manejo de conexiones y transacciones.
+Implementa el repositorio de documentos usando SQLAlchemy ORM en lugar de queries SQL directas.
+Mantiene la misma interfaz que la implementación anterior para compatibilidad.
 
 ¿Qué clases contiene?
-- DocumentRepositoryImpl: Implementación del repositorio de documentos
+- DocumentRepositoryImpl: Implementación del repositorio usando SQLAlchemy
 """
 
 import json
 import logging
 from typing import Optional, Dict, Any, List
 from datetime import datetime
+from sqlalchemy.orm import Session
+from sqlalchemy import and_, or_, func, desc
+
 from app.domain.entities.document import Document, Event
 from app.domain.repositories.document_repository import DocumentRepository
-from app.infrastructure.database.sql_server import SQLServerService
-from app.infrastructure.database.db_helper import DatabaseHelper
+from app.infrastructure.database.database import get_session
+from app.infrastructure.database.models import (
+    Document as DocumentModel,
+    DocumentExtractedData as DocumentExtractedDataModel,
+    LogEvent as LogEventModel
+)
 
 logger = logging.getLogger(__name__)
 
 
+def _document_model_to_entity(model: DocumentModel, extracted_data: Optional[Dict[str, Any]] = None) -> Document:
+    """
+    Convierte un modelo SQLAlchemy Document a una entidad de dominio Document.
+    
+    ¿Qué hace la función?
+    Transforma un modelo de base de datos (SQLAlchemy) en una entidad de dominio,
+    incluyendo los datos extraídos si están disponibles.
+    
+    ¿Qué parámetros recibe y de qué tipo?
+    - model (DocumentModel): Modelo SQLAlchemy de Document
+    - extracted_data (Optional[Dict[str, Any]]): Datos extraídos del documento
+    
+    ¿Qué dato regresa y de qué tipo?
+    - Document: Entidad de dominio Document
+    """
+    return Document(
+        id=model.id,
+        filename=model.filename,
+        original_filename=model.original_filename,
+        file_type=model.file_type,
+        s3_key=model.s3_key,
+        s3_bucket=model.s3_bucket,
+        classification=model.classification,
+        uploaded_by=model.uploaded_by,
+        uploaded_at=model.uploaded_at,
+        processed_at=model.processed_at,
+        file_size=model.file_size,
+        extracted_data=extracted_data
+    )
+
+
+def _event_model_to_dict(model: LogEventModel, document_filename: Optional[str] = None, 
+                         document_classification: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Convierte un modelo SQLAlchemy LogEvent a un diccionario.
+    
+    ¿Qué hace la función?
+    Transforma un modelo de base de datos (SQLAlchemy) en un diccionario
+    con la información del evento, incluyendo detalles del documento si están disponibles.
+    
+    ¿Qué parámetros recibe y de qué tipo?
+    - model (LogEventModel): Modelo SQLAlchemy de LogEvent
+    - document_filename (Optional[str]): Nombre del archivo del documento relacionado
+    - document_classification (Optional[str]): Clasificación del documento relacionado
+    
+    ¿Qué dato regresa y de qué tipo?
+    - Dict[str, Any]: Diccionario con la información del evento
+    """
+    return {
+        "id": model.id,
+        "event_type": model.event_type,
+        "description": model.description,
+        "document_id": model.document_id,
+        "document_filename": document_filename,
+        "document_classification": document_classification,
+        "user_id": model.user_id,
+        "created_at": model.created_at
+    }
+
+
 class DocumentRepositoryImpl(DocumentRepository):
     """
-    Implementación del repositorio de documentos.
+    Implementación del repositorio de documentos usando SQLAlchemy.
     
     ¿Qué hace la clase?
-    Proporciona métodos para guardar, obtener y listar documentos en la base de datos,
-    así como para guardar datos extraídos y eventos relacionados.
+    Proporciona métodos para guardar, obtener y listar documentos en la base de datos
+    usando SQLAlchemy ORM en lugar de queries SQL directas.
     """
     
-    def __init__(self, db_service: SQLServerService):
+    def __init__(self, db_service=None):
         """
-        Inicializa el repositorio con el servicio de base de datos.
+        Inicializa el repositorio.
         
         ¿Qué hace la función?
-        Configura el repositorio con el servicio de base de datos y crea
-        un helper para operaciones comunes.
+        Inicializa el repositorio. El parámetro db_service se mantiene para compatibilidad
+        pero no se usa, ya que SQLAlchemy maneja sus propias conexiones.
         
         ¿Qué parámetros recibe y de qué tipo?
-        - db_service (SQLServerService): Servicio de base de datos SQL Server
+        - db_service: Se mantiene para compatibilidad pero no se usa
         
         ¿Qué dato regresa y de qué tipo?
         - None
         """
-        self.db_service = db_service
-        self.db_helper = DatabaseHelper(db_service)
+        # db_service se mantiene para compatibilidad pero no se usa
+        pass
     
     async def save_document(self, document: Document) -> Document:
         """
         Guarda un documento en la base de datos.
         
         ¿Qué hace la función?
-        Guarda un documento nuevo o actualiza uno existente en la base de datos.
+        Guarda un documento nuevo o actualiza uno existente usando SQLAlchemy ORM.
         Si el documento tiene ID, se actualiza; si no, se inserta como nuevo.
         
         ¿Qué parámetros recibe y de qué tipo?
@@ -65,52 +131,45 @@ class DocumentRepositoryImpl(DocumentRepository):
         - Document: Documento guardado con ID y timestamps actualizados
         """
         try:
-            with self.db_helper.get_connection() as (conn, cursor):
+            with get_session() as session:
                 if document.id:
                     # Actualizar documento existente
-                    cursor.execute("""
-                        UPDATE documents
-                        SET filename = ?, original_filename = ?, file_type = ?,
-                            s3_key = ?, s3_bucket = ?, classification = ?,
-                            processed_at = ?, file_size = ?
-                        WHERE id = ?
-                    """, (
-                        document.filename,
-                        document.original_filename,
-                        document.file_type,
-                        document.s3_key,
-                        document.s3_bucket,
-                        document.classification,
-                        document.processed_at,
-                        document.file_size,
-                        document.id
-                    ))
-                    return document
+                    db_document = session.query(DocumentModel).filter(DocumentModel.id == document.id).first()
+                    if not db_document:
+                        raise Exception(f"Document with id {document.id} not found")
+                    
+                    db_document.filename = document.filename
+                    db_document.original_filename = document.original_filename
+                    db_document.file_type = document.file_type
+                    db_document.s3_key = document.s3_key
+                    db_document.s3_bucket = document.s3_bucket
+                    db_document.classification = document.classification
+                    db_document.processed_at = document.processed_at
+                    db_document.file_size = document.file_size
+                    
+                    session.commit()
+                    return _document_model_to_entity(db_document, document.extracted_data)
                 else:
                     # Insertar nuevo documento
-                    cursor.execute("""
-                        INSERT INTO documents (
-                            filename, original_filename, file_type, s3_key, s3_bucket,
-                            classification, uploaded_by, uploaded_at, processed_at, file_size
-                        )
-                        OUTPUT INSERTED.id, INSERTED.uploaded_at
-                        VALUES (?, ?, ?, ?, ?, ?, ?, GETDATE(), ?, ?)
-                    """, (
-                        document.filename,
-                        document.original_filename,
-                        document.file_type,
-                        document.s3_key,
-                        document.s3_bucket,
-                        document.classification,
-                        document.uploaded_by,
-                        document.processed_at,
-                        document.file_size
-                    ))
+                    db_document = DocumentModel(
+                        filename=document.filename,
+                        original_filename=document.original_filename,
+                        file_type=document.file_type,
+                        s3_key=document.s3_key,
+                        s3_bucket=document.s3_bucket,
+                        classification=document.classification,
+                        uploaded_by=document.uploaded_by,
+                        uploaded_at=datetime.utcnow() if not document.uploaded_at else document.uploaded_at,
+                        processed_at=document.processed_at,
+                        file_size=document.file_size
+                    )
                     
-                    row = cursor.fetchone()
-                    if row:
-                        document.id = row[0]
-                        document.uploaded_at = row[1]
+                    session.add(db_document)
+                    session.commit()
+                    session.refresh(db_document)
+                    
+                    document.id = db_document.id
+                    document.uploaded_at = db_document.uploaded_at
                     
                     return document
         except Exception as e:
@@ -122,8 +181,8 @@ class DocumentRepositoryImpl(DocumentRepository):
         Obtiene un documento por su ID.
         
         ¿Qué hace la función?
-        Busca un documento en la base de datos por su ID e incluye los datos
-        extraídos asociados si existen.
+        Busca un documento en la base de datos por su ID usando SQLAlchemy ORM
+        e incluye los datos extraídos asociados si existen.
         
         ¿Qué parámetros recibe y de qué tipo?
         - document_id (int): ID del documento a buscar
@@ -132,44 +191,26 @@ class DocumentRepositoryImpl(DocumentRepository):
         - Optional[Document]: Documento encontrado o None si no existe
         """
         try:
-            with self.db_helper.get_connection() as (conn, cursor):
-                cursor.execute("""
-                    SELECT id, filename, original_filename, file_type, s3_key, s3_bucket,
-                           classification, uploaded_by, uploaded_at, processed_at, file_size
-                    FROM documents
-                    WHERE id = ?
-                """, (document_id,))
+            with get_session() as session:
+                db_document = session.query(DocumentModel).filter(DocumentModel.id == document_id).first()
                 
-                row = cursor.fetchone()
-                if row:
-                    # Obtener datos extraídos si existen
-                    cursor.execute("""
-                        SELECT data_type, extracted_data
-                        FROM document_extracted_data
-                        WHERE document_id = ?
-                        ORDER BY created_at DESC
-                    """, (document_id,))
-                    
-                    extracted_data = None
-                    extracted_row = cursor.fetchone()
-                    if extracted_row:
-                        extracted_data = json.loads(extracted_row[1])
-                    
-                    return Document(
-                        id=row[0],
-                        filename=row[1],
-                        original_filename=row[2],
-                        file_type=row[3],
-                        s3_key=row[4],
-                        s3_bucket=row[5],
-                        classification=row[6],
-                        uploaded_by=row[7],
-                        uploaded_at=row[8],
-                        processed_at=row[9],
-                        file_size=row[10],
-                        extracted_data=extracted_data
-                    )
-                return None
+                if not db_document:
+                    return None
+                
+                # Obtener datos extraídos si existen
+                extracted_data = None
+                db_extracted = session.query(DocumentExtractedDataModel).filter(
+                    DocumentExtractedDataModel.document_id == document_id
+                ).order_by(desc(DocumentExtractedDataModel.created_at)).first()
+                
+                if db_extracted:
+                    try:
+                        extracted_data = json.loads(db_extracted.extracted_data)
+                    except (json.JSONDecodeError, TypeError) as e:
+                        logger.warning(f"Error parsing extracted_data for document {document_id}: {str(e)}")
+                        extracted_data = None
+                
+                return _document_model_to_entity(db_document, extracted_data)
         except Exception as e:
             logger.error(f"Error getting document: {str(e)}")
             raise Exception(f"Failed to get document: {str(e)}")
@@ -187,8 +228,8 @@ class DocumentRepositoryImpl(DocumentRepository):
         Lista documentos con filtros y paginación.
         
         ¿Qué hace la función?
-        Obtiene una lista paginada de documentos con filtros opcionales por usuario,
-        clasificación y rango de fechas. Incluye los datos extraídos de cada documento.
+        Obtiene una lista paginada de documentos con filtros opcionales usando SQLAlchemy ORM.
+        Incluye los datos extraídos de cada documento.
         
         ¿Qué parámetros recibe y de qué tipo?
         - user_id (Optional[int]): Filtrar por ID de usuario
@@ -199,88 +240,51 @@ class DocumentRepositoryImpl(DocumentRepository):
         - limit (int): Cantidad de resultados por página (default: 20)
         
         ¿Qué dato regresa y de qué tipo?
-        - Dict[str, Any]: Diccionario con:
-          - total: Total de documentos que cumplen los filtros
-          - page: Página actual
-          - limit: Límite por página
-          - documents: Lista de documentos
+        - Dict[str, Any]: Diccionario con total, page, limit, documents
         """
         try:
-            with self.db_helper.get_connection() as (conn, cursor):
-                # Build WHERE clause
-                conditions = []
-                params = []
+            with get_session() as session:
+                # Construir query base
+                query = session.query(DocumentModel)
                 
+                # Aplicar filtros
+                filters = []
                 if user_id:
-                    conditions.append("uploaded_by = ?")
-                    params.append(user_id)
-                
+                    filters.append(DocumentModel.uploaded_by == user_id)
                 if classification:
-                    conditions.append("classification = ?")
-                    params.append(classification)
-                
+                    filters.append(DocumentModel.classification == classification)
                 if date_from:
-                    conditions.append("uploaded_at >= ?")
-                    params.append(date_from)
-                
+                    filters.append(DocumentModel.uploaded_at >= date_from)
                 if date_to:
-                    conditions.append("uploaded_at <= ?")
-                    params.append(date_to)
+                    filters.append(DocumentModel.uploaded_at <= date_to)
                 
-                where_clause = " AND ".join(conditions) if conditions else "1=1"
+                if filters:
+                    query = query.filter(and_(*filters))
                 
-                # Get total count
-                cursor.execute(f"""
-                    SELECT COUNT(*) FROM documents WHERE {where_clause}
-                """, params)
-                total = cursor.fetchone()[0]
+                # Obtener total
+                total = query.count()
                 
-                # Get paginated results
+                # Aplicar paginación y ordenamiento
                 offset = (page - 1) * limit
-                cursor.execute(f"""
-                    SELECT id, filename, original_filename, file_type, s3_key, s3_bucket,
-                           classification, uploaded_by, uploaded_at, processed_at, file_size
-                    FROM documents
-                    WHERE {where_clause}
-                    ORDER BY uploaded_at DESC
-                    OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
-                """, params + [offset, limit])
+                db_documents = query.order_by(desc(DocumentModel.uploaded_at)).offset(offset).limit(limit).all()
                 
+                # Convertir a entidades y obtener datos extraídos
                 documents = []
-                for row in cursor.fetchall():
-                    document_id = row[0]
-                    
-                    # Get extracted data if exists
-                    cursor.execute("""
-                        SELECT data_type, extracted_data
-                        FROM document_extracted_data
-                        WHERE document_id = ?
-                        ORDER BY created_at DESC
-                    """, (document_id,))
-                    
+                for db_doc in db_documents:
+                    # Obtener datos extraídos
                     extracted_data = None
-                    extracted_row = cursor.fetchone()
-                    if extracted_row:
+                    db_extracted = session.query(DocumentExtractedDataModel).filter(
+                        DocumentExtractedDataModel.document_id == db_doc.id
+                    ).order_by(desc(DocumentExtractedDataModel.created_at)).first()
+                    
+                    if db_extracted:
                         try:
-                            extracted_data = json.loads(extracted_row[1])
+                            extracted_data = json.loads(db_extracted.extracted_data)
                         except (json.JSONDecodeError, TypeError) as e:
-                            logger.warning(f"Error parsing extracted_data for document {document_id}: {str(e)}")
+                            logger.warning(f"Error parsing extracted_data for document {db_doc.id}: {str(e)}")
                             extracted_data = None
                     
-                    documents.append(Document(
-                        id=document_id,
-                        filename=row[1],
-                        original_filename=row[2],
-                        file_type=row[3],
-                        s3_key=row[4],
-                        s3_bucket=row[5],
-                        classification=row[6],
-                        uploaded_by=row[7],
-                        uploaded_at=row[8],
-                        processed_at=row[9],
-                        file_size=row[10],
-                        extracted_data=extracted_data
-                    ))
+                    documents.append(_document_model_to_entity(db_doc, extracted_data))
                 
                 return {
                     "total": total,
@@ -302,8 +306,7 @@ class DocumentRepositoryImpl(DocumentRepository):
         Guarda datos extraídos para un documento.
         
         ¿Qué hace la función?
-        Almacena los datos estructurados extraídos de un documento (factura o información)
-        en la base de datos en formato JSON.
+        Almacena los datos estructurados extraídos de un documento usando SQLAlchemy ORM.
         
         ¿Qué parámetros recibe y de qué tipo?
         - document_id (int): ID del documento
@@ -314,15 +317,15 @@ class DocumentRepositoryImpl(DocumentRepository):
         - bool: True si se guardó exitosamente
         """
         try:
-            with self.db_helper.get_connection() as (conn, cursor):
-                cursor.execute("""
-                    INSERT INTO document_extracted_data (document_id, data_type, extracted_data)
-                    VALUES (?, ?, ?)
-                """, (
-                    document_id,
-                    data_type,
-                    json.dumps(extracted_data, ensure_ascii=False)
-                ))
+            with get_session() as session:
+                db_extracted = DocumentExtractedDataModel(
+                    document_id=document_id,
+                    data_type=data_type,
+                    extracted_data=json.dumps(extracted_data, ensure_ascii=False)
+                )
+                
+                session.add(db_extracted)
+                session.commit()
                 return True
         except Exception as e:
             logger.error(f"Error saving extracted data: {str(e)}")
@@ -333,8 +336,7 @@ class DocumentRepositoryImpl(DocumentRepository):
         Guarda un evento en la base de datos.
         
         ¿Qué hace la función?
-        Registra un evento del sistema (DOCUMENT_UPLOAD, AI_PROCESSING, etc.)
-        en la tabla de eventos con timestamps automáticos.
+        Registra un evento del sistema usando SQLAlchemy ORM.
         
         ¿Qué parámetros recibe y de qué tipo?
         - event (Event): Entidad del evento a guardar
@@ -343,22 +345,21 @@ class DocumentRepositoryImpl(DocumentRepository):
         - Event: Evento guardado con ID y timestamp actualizados
         """
         try:
-            with self.db_helper.get_connection() as (conn, cursor):
-                cursor.execute("""
-                    INSERT INTO log_events (event_type, description, document_id, user_id, created_at)
-                    OUTPUT INSERTED.id, INSERTED.created_at
-                    VALUES (?, ?, ?, ?, GETDATE())
-                """, (
-                    event.event_type,
-                    event.description,
-                    event.document_id,
-                    event.user_id
-                ))
+            with get_session() as session:
+                db_event = LogEventModel(
+                    event_type=event.event_type,
+                    description=event.description,
+                    document_id=event.document_id,
+                    user_id=event.user_id,
+                    created_at=datetime.utcnow() if not event.created_at else event.created_at
+                )
                 
-                row = cursor.fetchone()
-                if row:
-                    event.id = row[0]
-                    event.created_at = row[1]
+                session.add(db_event)
+                session.commit()
+                session.refresh(db_event)
+                
+                event.id = db_event.id
+                event.created_at = db_event.created_at
                 
                 return event
         except Exception as e:
@@ -381,8 +382,7 @@ class DocumentRepositoryImpl(DocumentRepository):
         Lista eventos con filtros y paginación.
         
         ¿Qué hace la función?
-        Obtiene una lista paginada de eventos del sistema con múltiples filtros opcionales
-        (tipo, documento, usuario, clasificación, fechas, búsqueda en descripción).
+        Obtiene una lista paginada de eventos del sistema con múltiples filtros usando SQLAlchemy ORM.
         
         ¿Qué parámetros recibe y de qué tipo?
         - event_type (Optional[str]): Filtrar por tipo de evento
@@ -396,97 +396,53 @@ class DocumentRepositoryImpl(DocumentRepository):
         - page_size (int): Cantidad de resultados por página (default: 50)
         
         ¿Qué dato regresa y de qué tipo?
-        - Dict[str, Any]: Diccionario con:
-          - total: Total de eventos que cumplen los filtros
-          - page: Página actual
-          - page_size: Tamaño de página
-          - total_pages: Total de páginas
-          - events: Lista de eventos
+        - Dict[str, Any]: Diccionario con total, page, page_size, total_pages, events
         """
         try:
-            with self.db_helper.get_connection() as (conn, cursor):
-                # Build WHERE clause
-                where_conditions = []
-                params = []
+            with get_session() as session:
+                # Construir query base con JOIN
+                from app.infrastructure.database.models import Document as DocumentModel
+                query = session.query(
+                    LogEventModel,
+                    DocumentModel.filename,
+                    DocumentModel.classification
+                ).outerjoin(DocumentModel, LogEventModel.document_id == DocumentModel.id)
                 
+                # Aplicar filtros
+                filters = []
                 if event_type:
-                    where_conditions.append("e.event_type = ?")
-                    params.append(event_type)
-                
+                    filters.append(LogEventModel.event_type == event_type)
                 if document_id:
-                    where_conditions.append("e.document_id = ?")
-                    params.append(document_id)
-                
+                    filters.append(LogEventModel.document_id == document_id)
                 if user_id:
-                    where_conditions.append("e.user_id = ?")
-                    params.append(user_id)
-                
+                    filters.append(LogEventModel.user_id == user_id)
                 if classification:
-                    where_conditions.append("d.classification = ?")
-                    params.append(classification)
-                
+                    filters.append(DocumentModel.classification == classification)
                 if date_from:
-                    where_conditions.append("e.created_at >= ?")
-                    params.append(date_from)
-                
+                    filters.append(LogEventModel.created_at >= date_from)
                 if date_to:
-                    where_conditions.append("e.created_at <= ?")
-                    params.append(date_to)
-                
+                    filters.append(LogEventModel.created_at <= date_to)
                 if description_search:
-                    where_conditions.append("e.description LIKE ?")
-                    params.append(f"%{description_search}%")
+                    filters.append(LogEventModel.description.like(f"%{description_search}%"))
                 
-                where_clause = " AND ".join(where_conditions) if where_conditions else "1=1"
+                if filters:
+                    query = query.filter(and_(*filters))
                 
-                # Count total
-                count_query = f"""
-                    SELECT COUNT(*)
-                    FROM log_events e
-                    LEFT JOIN documents d ON e.document_id = d.id
-                    WHERE {where_clause}
-                """
-                cursor.execute(count_query, params)
-                total = cursor.fetchone()[0]
+                # Obtener total
+                total = query.count()
                 
-                # Calculate pagination
+                # Calcular paginación
                 total_pages = (total + page_size - 1) // page_size
                 offset = (page - 1) * page_size
                 
-                # Get events with document info
-                query = f"""
-                    SELECT 
-                        e.id,
-                        e.event_type,
-                        e.description,
-                        e.document_id,
-                        d.filename as document_filename,
-                        d.classification as document_classification,
-                        e.user_id,
-                        e.created_at
-                    FROM log_events e
-                    LEFT JOIN documents d ON e.document_id = d.id
-                    WHERE {where_clause}
-                    ORDER BY e.created_at DESC
-                    OFFSET ? ROWS
-                    FETCH NEXT ? ROWS ONLY
-                """
+                # Obtener eventos paginados
+                results = query.order_by(desc(LogEventModel.created_at)).offset(offset).limit(page_size).all()
                 
-                params_with_pagination = params + [offset, page_size]
-                cursor.execute(query, params_with_pagination)
-                
+                # Convertir a diccionarios
                 events = []
-                for row in cursor.fetchall():
-                    events.append({
-                        "id": row[0],
-                        "event_type": row[1],
-                        "description": row[2],
-                        "document_id": row[3],
-                        "document_filename": row[4],
-                        "document_classification": row[5],
-                        "user_id": row[6],
-                        "created_at": row[7]
-                    })
+                for result in results:
+                    db_event, doc_filename, doc_classification = result
+                    events.append(_event_model_to_dict(db_event, doc_filename, doc_classification))
                 
                 return {
                     "total": total,

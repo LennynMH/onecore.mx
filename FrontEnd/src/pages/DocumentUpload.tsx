@@ -117,6 +117,28 @@ const DocumentUpload: React.FC = () => {
 
   return (
     <div className="document-upload">
+      {/* Overlay de bloqueo durante la carga */}
+      {uploading && (
+        <div className="loading-overlay">
+          <div className="loading-content">
+            <div className="spinner"></div>
+            <h3>Procesando documento...</h3>
+            <p>Por favor espera mientras analizamos tu documento con IA</p>
+            {uploadProgress > 0 && (
+              <div className="overlay-progress">
+                <div className="overlay-progress-bar">
+                  <div
+                    className="overlay-progress-fill"
+                    style={{ width: `${uploadProgress}%` }}
+                  />
+                </div>
+                <p className="overlay-progress-text">{uploadProgress}%</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="upload-container">
         <h2>Cargar Documento</h2>
         <p className="subtitle">
