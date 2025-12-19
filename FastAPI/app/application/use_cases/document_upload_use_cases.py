@@ -1,16 +1,29 @@
-"""Document upload use cases."""
+"""
+Document upload use cases.
 
-import os
+Refactorización con Auto (Claude/ChatGPT) - PARTE 3.1
+
+¿Qué hace este módulo?
+Maneja la lógica de negocio para la carga de documentos (PDF, JPG, PNG),
+incluyendo subida a S3, clasificación automática, y extracción de datos.
+Esta refactorización utiliza FileUtils y DocumentProcessor para mejorar la modularidad.
+
+¿Qué clases contiene?
+- DocumentUploadUseCases: Casos de uso para carga de documentos
+"""
+
 import logging
 from datetime import datetime
 from typing import Dict, Any, Optional
 from fastapi import UploadFile
 
-from app.domain.entities.document import Document, Event
+from app.domain.entities.document import Document
 from app.domain.repositories.document_repository import DocumentRepository
 from app.infrastructure.s3.s3_service import S3Service
 from app.infrastructure.ai.textract_service import TextractService
 from app.infrastructure.ai.openai_service import OpenAIService
+from app.application.utils import FileUtils
+from app.application.processors import DocumentProcessor
 
 logger = logging.getLogger(__name__)
 
@@ -25,57 +38,33 @@ class DocumentUploadUseCases:
         textract_service: Optional[TextractService] = None,
         openai_service: Optional[OpenAIService] = None
     ):
-        """Initialize use cases with services."""
+        """
+        Inicializa los casos de uso con los servicios necesarios.
+        
+        ¿Qué hace la función?
+        Configura los servicios para subida de documentos, incluyendo S3,
+        repositorio de documentos, y servicios de IA (Textract y OpenAI).
+        
+        ¿Qué parámetros recibe y de qué tipo?
+        - s3_service (S3Service): Servicio para subida a S3
+        - document_repository (DocumentRepository): Repositorio para guardar documentos
+        - textract_service (Optional[TextractService]): Servicio Textract (opcional)
+        - openai_service (Optional[OpenAIService]): Servicio OpenAI (opcional)
+        
+        ¿Qué dato regresa y de qué tipo?
+        - None
+        """
         self.s3_service = s3_service
         self.document_repository = document_repository
         self.textract_service = textract_service or TextractService()
         self.openai_service = openai_service
-    
-    @staticmethod
-    def _generate_unique_filename(original_filename: str) -> str:
-        """
-        Generate unique filename with timestamp to avoid duplicates.
         
-        Format: nombre_archivo_ddmmyyyyhhmmss.extension
-        Example: invoice.pdf -> invoice_18122025201153.pdf
-        
-        Args:
-            original_filename: Original filename from upload
-            
-        Returns:
-            Filename with timestamp suffix
-        """
-        # Get file name and extension
-        name, ext = os.path.splitext(original_filename)
-        
-        # Generate timestamp: ddmmyyyyhhmmss
-        timestamp = datetime.utcnow().strftime('%d%m%Y%H%M%S')
-        
-        # Combine: nombre_timestamp.extension
-        unique_filename = f"{name}_{timestamp}{ext}"
-        
-        return unique_filename
-    
-    @staticmethod
-    def _get_file_type(filename: str) -> str:
-        """
-        Get file type from filename.
-        
-        Args:
-            filename: Filename with extension
-            
-        Returns:
-            File type (PDF, JPG, PNG)
-        """
-        ext = os.path.splitext(filename)[1].lower()
-        if ext == '.pdf':
-            return 'PDF'
-        elif ext in ['.jpg', '.jpeg']:
-            return 'JPG'
-        elif ext == '.png':
-            return 'PNG'
-        else:
-            return ext.upper().replace('.', '')
+        # Inicializar procesador de documentos
+        self.document_processor = DocumentProcessor(
+            textract_service=self.textract_service,
+            document_repository=self.document_repository,
+            openai_service=self.openai_service
+        )
     
     async def upload_document(
         self,
@@ -83,36 +72,57 @@ class DocumentUploadUseCases:
         user_id: int
     ) -> Dict[str, Any]:
         """
-        Upload document to S3 and database.
+        Sube un documento a S3 y base de datos, con clasificación y extracción de datos.
         
-        Args:
-            file: Document file to upload (PDF, JPG, PNG)
-            user_id: ID of user uploading the document
-            
-        Returns:
-            Dictionary with upload result
+        ¿Qué hace la función?
+        Procesa un documento completo: valida el tipo, genera nombre único, sube a S3,
+        clasifica con Textract, extrae datos estructurados, guarda en BD y registra eventos.
+        Usa FileUtils para utilidades de archivos y DocumentProcessor para el flujo de procesamiento.
+        
+        ¿Qué parámetros recibe y de qué tipo?
+        - file (UploadFile): Archivo del documento a subir (PDF, JPG, PNG)
+        - user_id (int): ID del usuario que está subiendo el documento
+        
+        ¿Qué dato regresa y de qué tipo?
+        - Dict[str, Any]: Diccionario con resultado de la operación:
+          - success (bool): True si la operación fue exitosa
+          - message (str): Mensaje descriptivo del resultado
+          - document_id (int): ID del documento guardado
+          - filename (str): Nombre único del archivo
+          - original_filename (str): Nombre original del archivo
+          - s3_key (str | None): Clave S3 si se subió exitosamente
+          - s3_bucket (str | None): Bucket S3 si se subió exitosamente
+          - classification (str | None): Clasificación del documento (FACTURA/INFORMACIÓN)
+          - extracted_data (Dict | None): Datos extraídos estructurados
+          - processing_time_ms (int | None): Tiempo de procesamiento en milisegundos
+        
+        Raises:
+            ValueError: Si el tipo de archivo no es permitido
+            Exception: Si ocurre un error durante el procesamiento
         """
         try:
-            # Validate file type
-            file_type = self._get_file_type(file.filename)
-            if file_type not in ['PDF', 'JPG', 'PNG']:
+            # Validar tipo de archivo usando FileUtils
+            if not FileUtils.validate_file_type(file.filename, ['PDF', 'JPG', 'PNG']):
+                file_type = FileUtils.get_file_type(file.filename)
                 raise ValueError(f"Invalid file type: {file_type}. Only PDF, JPG, PNG are allowed.")
             
-            # Generate unique filename with timestamp
-            unique_filename = self._generate_unique_filename(file.filename)
+            file_type = FileUtils.get_file_type(file.filename)
             
-            # Read file content to get size (before S3 upload)
+            # Generar nombre único usando FileUtils
+            unique_filename = FileUtils.generate_unique_filename(file.filename)
+            
+            # Leer contenido del archivo para obtener tamaño
             file_content = await file.read()
             file_size = len(file_content)
-            # Reset file pointer for S3 upload
+            # Resetear puntero del archivo para subida a S3
             await file.seek(0)
             
-            # Try to upload to S3
+            # Intentar subir a S3
             s3_key = None
             s3_bucket = None
             try:
-                # Use unique filename in S3 path
-                s3_key_path = f"documents/{datetime.utcnow().strftime('%Y/%m/%d')}/{unique_filename}"
+                # Usar FileUtils para generar ruta S3
+                s3_key_path = FileUtils.get_s3_path(unique_filename, "documents")
                 s3_key = await self.s3_service.upload_file(file, s3_key_path)
                 if s3_key:
                     from app.core.config import settings
@@ -125,34 +135,17 @@ class DocumentUploadUseCases:
                 s3_key = None
                 s3_bucket = None
             
-            # Classify document using AWS Textract (FASE 2)
-            classification = None
-            processing_time_ms = None
-            analysis_result = None
+            # Clasificar documento usando DocumentProcessor
+            classification_result = await self.document_processor.classify_document(
+                file=file,
+                s3_key=s3_key,
+                s3_bucket=s3_bucket
+            )
+            classification = classification_result.get("classification")
+            processing_time_ms = classification_result.get("processing_time_ms")
+            analysis_result = classification_result.get("analysis_result")
             
-            try:
-                from app.core.config import settings
-                if settings.aws_textract_enabled:
-                    logger.info("Starting document classification with AWS Textract...")
-                    analysis_result = await self.textract_service.analyze_document(
-                        file=file,
-                        s3_key=s3_key,
-                        s3_bucket=s3_bucket
-                    )
-                    classification = analysis_result.get("classification", "INFORMACIÓN")
-                    processing_time_ms = analysis_result.get("processing_time_ms", 0)
-                    
-                    if analysis_result.get("error"):
-                        logger.warning(f"Textract analysis completed with errors: {analysis_result.get('error')}")
-                    else:
-                        logger.info(f"Document classified as: {classification} (confidence: {analysis_result.get('confidence', 0):.2f}%)")
-                else:
-                    logger.info("AWS Textract is disabled. Skipping classification.")
-            except Exception as e:
-                logger.warning(f"Error during document classification: {str(e)}. Continuing with upload.")
-                classification = "INFORMACIÓN"  # Default classification
-            
-            # Create document entity
+            # Crear entidad de documento
             processed_at = datetime.utcnow() if classification else None
             document = Document(
                 filename=unique_filename,
@@ -160,110 +153,31 @@ class DocumentUploadUseCases:
                 file_type=file_type,
                 s3_key=s3_key,
                 s3_bucket=s3_bucket,
-                classification=classification,  # Set from Textract analysis
+                classification=classification,
                 uploaded_by=user_id,
                 file_size=file_size,
-                processed_at=processed_at  # Set when classification is done
+                processed_at=processed_at
             )
             
-            # Save document to database
+            # Guardar documento en base de datos
             document = await self.document_repository.save_document(document)
             
-            # Register DOCUMENT_UPLOAD event
-            try:
-                event = Event(
-                    event_type="DOCUMENT_UPLOAD",
-                    description=f"Document uploaded: {file.filename}",
-                    document_id=document.id,
-                    user_id=user_id
-                )
-                await self.document_repository.save_event(event)
-            except Exception as e:
-                logger.warning(f"Failed to register DOCUMENT_UPLOAD event: {str(e)}")
+            # Registrar eventos usando DocumentProcessor
+            await self.document_processor.register_events(
+                document=document,
+                user_id=user_id,
+                analysis_result=analysis_result
+            )
             
-            # Register AI_PROCESSING event if classification was performed
-            if classification and analysis_result and not analysis_result.get("error"):
-                try:
-                    ai_event = Event(
-                        event_type="AI_PROCESSING",
-                        description=f"Document classified as {classification} using AWS Textract (confidence: {analysis_result.get('confidence', 0):.2f}%)",
-                        document_id=document.id,
-                        user_id=user_id
-                    )
-                    await self.document_repository.save_event(ai_event)
-                except Exception as e:
-                    logger.warning(f"Failed to register AI_PROCESSING event: {str(e)}")
-            
-            # FASE 3: Extract structured data based on classification
-            extracted_data = None
-            try:
-                from app.core.config import settings
-                raw_text = analysis_result.get("raw_text") if analysis_result else None
-                
-                if classification == "FACTURA":
-                    logger.info("Extracting invoice data...")
-                    # Reset file pointer for extraction
-                    await file.seek(0)
-                    invoice_data = await self.textract_service.extract_invoice_data(
-                        file=file,
-                        s3_key=s3_key,
-                        s3_bucket=s3_bucket,
-                        raw_text=raw_text
-                    )
-                    
-                    if invoice_data:
-                        # Save extracted data to database
-                        await self.document_repository.save_extracted_data(
-                            document_id=document.id,
-                            data_type="INVOICE",
-                            extracted_data=invoice_data
-                        )
-                        extracted_data = invoice_data
-                        logger.info(f"Invoice data extracted and saved: {len(invoice_data)} fields")
-                
-                elif classification == "INFORMACIÓN":
-                    logger.info("Extracting information data...")
-                    # Reset file pointer for extraction
-                    await file.seek(0)
-                    information_data = await self.textract_service.extract_information_data(
-                        file=file,
-                        s3_key=s3_key,
-                        s3_bucket=s3_bucket,
-                        raw_text=raw_text
-                    )
-                    
-                    # Use OpenAI for sentiment analysis if available
-                    if self.openai_service and information_data.get("resumen"):
-                        try:
-                            from app.core.config import settings
-                            if settings.openai_enabled:
-                                logger.info("Analyzing sentiment with OpenAI...")
-                                sentiment = await self.openai_service.analyze_sentiment(
-                                    information_data.get("resumen", "")
-                                )
-                                information_data["sentimiento"] = sentiment
-                                
-                                # Generate better summary if OpenAI is available
-                                if raw_text:
-                                    summary = await self.openai_service.generate_summary(raw_text)
-                                    if summary:
-                                        information_data["resumen"] = summary
-                        except Exception as e:
-                            logger.warning(f"Error using OpenAI for sentiment analysis: {str(e)}")
-                    
-                    if information_data:
-                        # Save extracted data to database
-                        await self.document_repository.save_extracted_data(
-                            document_id=document.id,
-                            data_type="INFORMATION",
-                            extracted_data=information_data
-                        )
-                        extracted_data = information_data
-                        logger.info(f"Information data extracted and saved: {len(information_data)} fields")
-                
-            except Exception as e:
-                logger.warning(f"Error during data extraction: {str(e)}. Continuing without extracted data.")
-                # Don't fail the upload if extraction fails
+            # Extraer datos estructurados usando DocumentProcessor
+            extracted_data = await self.document_processor.extract_data(
+                file=file,
+                classification=classification or "INFORMACIÓN",
+                document_id=document.id,
+                analysis_result=analysis_result,
+                s3_key=s3_key,
+                s3_bucket=s3_bucket
+            )
             
             return {
                 "success": True,
@@ -274,7 +188,7 @@ class DocumentUploadUseCases:
                 "s3_key": document.s3_key,
                 "s3_bucket": document.s3_bucket,
                 "classification": document.classification,
-                "extracted_data": extracted_data,  # FASE 3: Datos extraídos
+                "extracted_data": extracted_data,
                 "processing_time_ms": processing_time_ms
             }
             

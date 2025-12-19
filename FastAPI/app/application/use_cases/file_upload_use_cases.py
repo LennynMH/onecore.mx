@@ -25,6 +25,7 @@ from app.infrastructure.s3.s3_service import S3Service
 from app.domain.repositories.file_repository import FileRepository
 from app.core.config import settings
 from app.application.validators import CSVRowValidator
+from app.application.utils import FileUtils
 
 logger = logging.getLogger(__name__)
 
@@ -41,30 +42,6 @@ class FileUploadUseCases:
         self.s3_service = s3_service
         self.file_repository = file_repository
     
-    @staticmethod
-    def _generate_unique_filename(original_filename: str) -> str:
-        """
-        Generate unique filename with timestamp to avoid duplicates.
-        
-        Format: nombre_archivo_ddmmyyyyhhmmss.extension
-        Example: test.csv -> test_18122025201153.csv
-        
-        Args:
-            original_filename: Original filename from upload
-            
-        Returns:
-            Filename with timestamp suffix
-        """
-        # Get file name and extension
-        name, ext = os.path.splitext(original_filename)
-        
-        # Generate timestamp: ddmmyyyyhhmmss
-        timestamp = datetime.utcnow().strftime('%d%m%Y%H%M%S')
-        
-        # Combine: nombre_timestamp.extension
-        unique_filename = f"{name}_{timestamp}{ext}"
-        
-        return unique_filename
     
     async def upload_and_validate_file(
         self,
@@ -158,15 +135,15 @@ class FileUploadUseCases:
                     "row": None
                 })
             
-            # Generate unique filename with timestamp to avoid duplicates
-            unique_filename = self._generate_unique_filename(file.filename)
+            # Generar nombre único usando FileUtils
+            unique_filename = FileUtils.generate_unique_filename(file.filename)
             
             # Try to upload to S3 (optional - will continue even if it fails)
             s3_key = None
             s3_bucket = None
             try:
-                # Use unique filename in S3 path
-                s3_key_path = f"uploads/{datetime.utcnow().strftime('%Y/%m/%d')}/{unique_filename}"
+                # Usar FileUtils para generar ruta S3
+                s3_key_path = FileUtils.get_s3_path(unique_filename, "uploads")
                 s3_key = await self.s3_service.upload_file(file, s3_key_path)
                 if s3_key:
                     s3_bucket = settings.aws_s3_bucket_name
