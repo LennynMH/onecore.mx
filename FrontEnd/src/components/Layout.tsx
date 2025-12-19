@@ -31,6 +31,12 @@ const Layout: React.FC = () => {
           >
             Historial
           </Link>
+          <Link
+            to="/events"
+            className={isActive('/events') ? 'nav-link active' : 'nav-link'}
+          >
+            Eventos
+          </Link>
           <button onClick={handleLogout} className="logout-btn">
             Cerrar Sesión
           </button>

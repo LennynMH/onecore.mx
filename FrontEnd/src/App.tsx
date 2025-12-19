@@ -6,6 +6,7 @@ import Login from './pages/Login';
 import DocumentUpload from './pages/DocumentUpload';
 import DocumentResults from './pages/DocumentResults';
 import DocumentHistory from './pages/DocumentHistory';
+import EventsHistory from './pages/EventsHistory';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 
@@ -29,6 +30,7 @@ function App() {
             <Route path="upload" element={<DocumentUpload />} />
             <Route path="results" element={<DocumentResults />} />
             <Route path="history" element={<DocumentHistory />} />
+            <Route path="events" element={<EventsHistory />} />
           </Route>
         </Routes>
         <ToastContainer

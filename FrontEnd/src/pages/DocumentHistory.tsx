@@ -62,9 +62,58 @@ const DocumentHistory: React.FC = () => {
     setPagination((prev) => ({ ...prev, page: 1 }));
   };
 
-  const handleExportExcel = () => {
-    // TODO: Implementar exportación a Excel
-    toast.info('Funcionalidad de exportación próximamente');
+  const handleExportExcel = async () => {
+    try {
+      setLoading(true);
+      const token = localStorage.getItem('access_token');
+      if (!token) {
+        toast.error('No hay token de autenticación');
+        return;
+      }
+
+      // Construir URL con filtros
+      const params = new URLSearchParams();
+      if (filters.classification) {
+        params.append('classification', filters.classification);
+      }
+      if (filters.date_from) {
+        params.append('date_from', filters.date_from);
+      }
+      if (filters.date_to) {
+        params.append('date_to', filters.date_to);
+      }
+
+      const url = `http://localhost:8000/api/v1/history/export?${params.toString()}`;
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Error al exportar historial');
+      }
+
+      // Descargar archivo
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = `historial_${new Date().toISOString().split('T')[0]}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
+
+      toast.success('Historial exportado correctamente');
+    } catch (error: any) {
+      toast.error('Error al exportar historial');
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const formatDate = (dateString: string) => {
