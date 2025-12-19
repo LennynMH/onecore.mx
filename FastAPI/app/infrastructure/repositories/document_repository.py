@@ -1,4 +1,16 @@
-"""Document repository implementation."""
+"""
+Document repository implementation.
+
+Refactorización con Auto (Claude/ChatGPT) - PARTE 3.1
+
+¿Qué hace este módulo?
+Implementa el repositorio de documentos usando SQL Server.
+Esta refactorización utiliza DatabaseHelper para eliminar código duplicado
+de manejo de conexiones y transacciones.
+
+¿Qué clases contiene?
+- DocumentRepositoryImpl: Implementación del repositorio de documentos
+"""
 
 import json
 import logging
@@ -7,140 +19,160 @@ from datetime import datetime
 from app.domain.entities.document import Document, Event
 from app.domain.repositories.document_repository import DocumentRepository
 from app.infrastructure.database.sql_server import SQLServerService
+from app.infrastructure.database.db_helper import DatabaseHelper
 
 logger = logging.getLogger(__name__)
 
 
 class DocumentRepositoryImpl(DocumentRepository):
-    """Document repository implementation."""
+    """
+    Implementación del repositorio de documentos.
+    
+    ¿Qué hace la clase?
+    Proporciona métodos para guardar, obtener y listar documentos en la base de datos,
+    así como para guardar datos extraídos y eventos relacionados.
+    """
     
     def __init__(self, db_service: SQLServerService):
-        """Initialize repository with database service."""
+        """
+        Inicializa el repositorio con el servicio de base de datos.
+        
+        ¿Qué hace la función?
+        Configura el repositorio con el servicio de base de datos y crea
+        un helper para operaciones comunes.
+        
+        ¿Qué parámetros recibe y de qué tipo?
+        - db_service (SQLServerService): Servicio de base de datos SQL Server
+        
+        ¿Qué dato regresa y de qué tipo?
+        - None
+        """
         self.db_service = db_service
+        self.db_helper = DatabaseHelper(db_service)
     
     async def save_document(self, document: Document) -> Document:
-        """Save document to database."""
-        conn = None
-        cursor = None
+        """
+        Guarda un documento en la base de datos.
+        
+        ¿Qué hace la función?
+        Guarda un documento nuevo o actualiza uno existente en la base de datos.
+        Si el documento tiene ID, se actualiza; si no, se inserta como nuevo.
+        
+        ¿Qué parámetros recibe y de qué tipo?
+        - document (Document): Entidad del documento a guardar
+        
+        ¿Qué dato regresa y de qué tipo?
+        - Document: Documento guardado con ID y timestamps actualizados
+        """
         try:
-            conn = self.db_service.get_connection()
-            cursor = conn.cursor()
-            
-            if document.id:
-                # Update existing document
+            with self.db_helper.get_connection() as (conn, cursor):
+                if document.id:
+                    # Actualizar documento existente
+                    cursor.execute("""
+                        UPDATE documents
+                        SET filename = ?, original_filename = ?, file_type = ?,
+                            s3_key = ?, s3_bucket = ?, classification = ?,
+                            processed_at = ?, file_size = ?
+                        WHERE id = ?
+                    """, (
+                        document.filename,
+                        document.original_filename,
+                        document.file_type,
+                        document.s3_key,
+                        document.s3_bucket,
+                        document.classification,
+                        document.processed_at,
+                        document.file_size,
+                        document.id
+                    ))
+                    return document
+                else:
+                    # Insertar nuevo documento
+                    cursor.execute("""
+                        INSERT INTO documents (
+                            filename, original_filename, file_type, s3_key, s3_bucket,
+                            classification, uploaded_by, uploaded_at, processed_at, file_size
+                        )
+                        OUTPUT INSERTED.id, INSERTED.uploaded_at
+                        VALUES (?, ?, ?, ?, ?, ?, ?, GETDATE(), ?, ?)
+                    """, (
+                        document.filename,
+                        document.original_filename,
+                        document.file_type,
+                        document.s3_key,
+                        document.s3_bucket,
+                        document.classification,
+                        document.uploaded_by,
+                        document.processed_at,
+                        document.file_size
+                    ))
+                    
+                    row = cursor.fetchone()
+                    if row:
+                        document.id = row[0]
+                        document.uploaded_at = row[1]
+                    
+                    return document
+        except Exception as e:
+            logger.error(f"Error saving document: {str(e)}")
+            raise Exception(f"Failed to save document: {str(e)}")
+    
+    async def get_document(self, document_id: int) -> Optional[Document]:
+        """
+        Obtiene un documento por su ID.
+        
+        ¿Qué hace la función?
+        Busca un documento en la base de datos por su ID e incluye los datos
+        extraídos asociados si existen.
+        
+        ¿Qué parámetros recibe y de qué tipo?
+        - document_id (int): ID del documento a buscar
+        
+        ¿Qué dato regresa y de qué tipo?
+        - Optional[Document]: Documento encontrado o None si no existe
+        """
+        try:
+            with self.db_helper.get_connection() as (conn, cursor):
                 cursor.execute("""
-                    UPDATE documents
-                    SET filename = ?, original_filename = ?, file_type = ?,
-                        s3_key = ?, s3_bucket = ?, classification = ?,
-                        processed_at = ?, file_size = ?
+                    SELECT id, filename, original_filename, file_type, s3_key, s3_bucket,
+                           classification, uploaded_by, uploaded_at, processed_at, file_size
+                    FROM documents
                     WHERE id = ?
-                """, (
-                    document.filename,
-                    document.original_filename,
-                    document.file_type,
-                    document.s3_key,
-                    document.s3_bucket,
-                    document.classification,
-                    document.processed_at,
-                    document.file_size,
-                    document.id
-                ))
-                conn.commit()
-                return document
-            else:
-                # Insert new document
-                cursor.execute("""
-                    INSERT INTO documents (
-                        filename, original_filename, file_type, s3_key, s3_bucket,
-                        classification, uploaded_by, uploaded_at, processed_at, file_size
-                    )
-                    OUTPUT INSERTED.id, INSERTED.uploaded_at
-                    VALUES (?, ?, ?, ?, ?, ?, ?, GETDATE(), ?, ?)
-                """, (
-                    document.filename,
-                    document.original_filename,
-                    document.file_type,
-                    document.s3_key,
-                    document.s3_bucket,
-                    document.classification,
-                    document.uploaded_by,
-                    document.processed_at,
-                    document.file_size
-                ))
+                """, (document_id,))
                 
                 row = cursor.fetchone()
                 if row:
-                    document.id = row[0]
-                    document.uploaded_at = row[1]
-                
-                conn.commit()
-                return document
-                
-        except Exception as e:
-            logger.error(f"Error saving document: {str(e)}")
-            if conn:
-                conn.rollback()
-            raise Exception(f"Failed to save document: {str(e)}")
-        finally:
-            if cursor:
-                cursor.close()
-            if conn:
-                conn.close()
-    
-    async def get_document(self, document_id: int) -> Optional[Document]:
-        """Get document by ID."""
-        conn = None
-        cursor = None
-        try:
-            conn = self.db_service.get_connection()
-            cursor = conn.cursor()
-            
-            cursor.execute("""
-                SELECT id, filename, original_filename, file_type, s3_key, s3_bucket,
-                       classification, uploaded_by, uploaded_at, processed_at, file_size
-                FROM documents
-                WHERE id = ?
-            """, (document_id,))
-            
-            row = cursor.fetchone()
-            if row:
-                # Get extracted data if exists
-                cursor.execute("""
-                    SELECT data_type, extracted_data
-                    FROM document_extracted_data
-                    WHERE document_id = ?
-                    ORDER BY created_at DESC
-                """, (document_id,))
-                
-                extracted_data = None
-                extracted_row = cursor.fetchone()
-                if extracted_row:
-                    extracted_data = json.loads(extracted_row[1])
-                
-                return Document(
-                    id=row[0],
-                    filename=row[1],
-                    original_filename=row[2],
-                    file_type=row[3],
-                    s3_key=row[4],
-                    s3_bucket=row[5],
-                    classification=row[6],
-                    uploaded_by=row[7],
-                    uploaded_at=row[8],
-                    processed_at=row[9],
-                    file_size=row[10],
-                    extracted_data=extracted_data
-                )
-            return None
-            
+                    # Obtener datos extraídos si existen
+                    cursor.execute("""
+                        SELECT data_type, extracted_data
+                        FROM document_extracted_data
+                        WHERE document_id = ?
+                        ORDER BY created_at DESC
+                    """, (document_id,))
+                    
+                    extracted_data = None
+                    extracted_row = cursor.fetchone()
+                    if extracted_row:
+                        extracted_data = json.loads(extracted_row[1])
+                    
+                    return Document(
+                        id=row[0],
+                        filename=row[1],
+                        original_filename=row[2],
+                        file_type=row[3],
+                        s3_key=row[4],
+                        s3_bucket=row[5],
+                        classification=row[6],
+                        uploaded_by=row[7],
+                        uploaded_at=row[8],
+                        processed_at=row[9],
+                        file_size=row[10],
+                        extracted_data=extracted_data
+                    )
+                return None
         except Exception as e:
             logger.error(f"Error getting document: {str(e)}")
             raise Exception(f"Failed to get document: {str(e)}")
-        finally:
-            if cursor:
-                cursor.close()
-            if conn:
-                conn.close()
     
     async def list_documents(
         self,
@@ -151,12 +183,30 @@ class DocumentRepositoryImpl(DocumentRepository):
         page: int = 1,
         limit: int = 20
     ) -> Dict[str, Any]:
-        """List documents with filters and pagination."""
-        conn = None
-        cursor = None
+        """
+        Lista documentos con filtros y paginación.
+        
+        ¿Qué hace la función?
+        Obtiene una lista paginada de documentos con filtros opcionales por usuario,
+        clasificación y rango de fechas. Incluye los datos extraídos de cada documento.
+        
+        ¿Qué parámetros recibe y de qué tipo?
+        - user_id (Optional[int]): Filtrar por ID de usuario
+        - classification (Optional[str]): Filtrar por clasificación
+        - date_from (Optional[str]): Fecha inicial del rango
+        - date_to (Optional[str]): Fecha final del rango
+        - page (int): Número de página (default: 1)
+        - limit (int): Cantidad de resultados por página (default: 20)
+        
+        ¿Qué dato regresa y de qué tipo?
+        - Dict[str, Any]: Diccionario con:
+          - total: Total de documentos que cumplen los filtros
+          - page: Página actual
+          - limit: Límite por página
+          - documents: Lista de documentos
+        """
         try:
-            conn = self.db_service.get_connection()
-            cursor = conn.cursor()
+            with self.db_helper.get_connection() as (conn, cursor):
             
             # Build WHERE clause
             conditions = []
@@ -233,21 +283,15 @@ class DocumentRepositoryImpl(DocumentRepository):
                     extracted_data=extracted_data
                 ))
             
-            return {
-                "total": total,
-                "page": page,
-                "limit": limit,
-                "documents": documents
-            }
-            
+                return {
+                    "total": total,
+                    "page": page,
+                    "limit": limit,
+                    "documents": documents
+                }
         except Exception as e:
             logger.error(f"Error listing documents: {str(e)}")
             raise Exception(f"Failed to list documents: {str(e)}")
-        finally:
-            if cursor:
-                cursor.close()
-            if conn:
-                conn.close()
     
     async def save_extracted_data(
         self,
@@ -255,73 +299,72 @@ class DocumentRepositoryImpl(DocumentRepository):
         data_type: str,
         extracted_data: Dict[str, Any]
     ) -> bool:
-        """Save extracted data for a document."""
-        conn = None
-        cursor = None
+        """
+        Guarda datos extraídos para un documento.
+        
+        ¿Qué hace la función?
+        Almacena los datos estructurados extraídos de un documento (factura o información)
+        en la base de datos en formato JSON.
+        
+        ¿Qué parámetros recibe y de qué tipo?
+        - document_id (int): ID del documento
+        - data_type (str): Tipo de datos ("INVOICE" o "INFORMATION")
+        - extracted_data (Dict[str, Any]): Datos extraídos estructurados
+        
+        ¿Qué dato regresa y de qué tipo?
+        - bool: True si se guardó exitosamente
+        """
         try:
-            conn = self.db_service.get_connection()
-            cursor = conn.cursor()
-            
-            cursor.execute("""
-                INSERT INTO document_extracted_data (document_id, data_type, extracted_data)
-                VALUES (?, ?, ?)
-            """, (
-                document_id,
-                data_type,
-                json.dumps(extracted_data, ensure_ascii=False)
-            ))
-            
-            conn.commit()
-            return True
-            
+            with self.db_helper.get_connection() as (conn, cursor):
+                cursor.execute("""
+                    INSERT INTO document_extracted_data (document_id, data_type, extracted_data)
+                    VALUES (?, ?, ?)
+                """, (
+                    document_id,
+                    data_type,
+                    json.dumps(extracted_data, ensure_ascii=False)
+                ))
+                return True
         except Exception as e:
             logger.error(f"Error saving extracted data: {str(e)}")
-            if conn:
-                conn.rollback()
             raise Exception(f"Failed to save extracted data: {str(e)}")
-        finally:
-            if cursor:
-                cursor.close()
-            if conn:
-                conn.close()
     
     async def save_event(self, event: Event) -> Event:
-        """Save event to database."""
-        conn = None
-        cursor = None
+        """
+        Guarda un evento en la base de datos.
+        
+        ¿Qué hace la función?
+        Registra un evento del sistema (DOCUMENT_UPLOAD, AI_PROCESSING, etc.)
+        en la tabla de eventos con timestamps automáticos.
+        
+        ¿Qué parámetros recibe y de qué tipo?
+        - event (Event): Entidad del evento a guardar
+        
+        ¿Qué dato regresa y de qué tipo?
+        - Event: Evento guardado con ID y timestamp actualizados
+        """
         try:
-            conn = self.db_service.get_connection()
-            cursor = conn.cursor()
-            
-            cursor.execute("""
-                INSERT INTO log_events (event_type, description, document_id, user_id, created_at)
-                OUTPUT INSERTED.id, INSERTED.created_at
-                VALUES (?, ?, ?, ?, GETDATE())
-            """, (
-                event.event_type,
-                event.description,
-                event.document_id,
-                event.user_id
-            ))
-            
-            row = cursor.fetchone()
-            if row:
-                event.id = row[0]
-                event.created_at = row[1]
-            
-            conn.commit()
-            return event
-            
+            with self.db_helper.get_connection() as (conn, cursor):
+                cursor.execute("""
+                    INSERT INTO log_events (event_type, description, document_id, user_id, created_at)
+                    OUTPUT INSERTED.id, INSERTED.created_at
+                    VALUES (?, ?, ?, ?, GETDATE())
+                """, (
+                    event.event_type,
+                    event.description,
+                    event.document_id,
+                    event.user_id
+                ))
+                
+                row = cursor.fetchone()
+                if row:
+                    event.id = row[0]
+                    event.created_at = row[1]
+                
+                return event
         except Exception as e:
             logger.error(f"Error saving event: {str(e)}")
-            if conn:
-                conn.rollback()
             raise Exception(f"Failed to save event: {str(e)}")
-        finally:
-            if cursor:
-                cursor.close()
-            if conn:
-                conn.close()
     
     async def list_events(
         self,
@@ -335,12 +378,34 @@ class DocumentRepositoryImpl(DocumentRepository):
         page: int = 1,
         page_size: int = 50
     ) -> Dict[str, Any]:
-        """List events with filters and pagination."""
-        conn = None
-        cursor = None
+        """
+        Lista eventos con filtros y paginación.
+        
+        ¿Qué hace la función?
+        Obtiene una lista paginada de eventos del sistema con múltiples filtros opcionales
+        (tipo, documento, usuario, clasificación, fechas, búsqueda en descripción).
+        
+        ¿Qué parámetros recibe y de qué tipo?
+        - event_type (Optional[str]): Filtrar por tipo de evento
+        - document_id (Optional[int]): Filtrar por ID de documento
+        - user_id (Optional[int]): Filtrar por ID de usuario
+        - classification (Optional[str]): Filtrar por clasificación del documento
+        - date_from (Optional[datetime]): Fecha inicial del rango
+        - date_to (Optional[datetime]): Fecha final del rango
+        - description_search (Optional[str]): Búsqueda de texto en descripción
+        - page (int): Número de página (default: 1)
+        - page_size (int): Cantidad de resultados por página (default: 50)
+        
+        ¿Qué dato regresa y de qué tipo?
+        - Dict[str, Any]: Diccionario con:
+          - total: Total de eventos que cumplen los filtros
+          - page: Página actual
+          - page_size: Tamaño de página
+          - total_pages: Total de páginas
+          - events: Lista de eventos
+        """
         try:
-            conn = self.db_service.get_connection()
-            cursor = conn.cursor()
+            with self.db_helper.get_connection() as (conn, cursor):
             
             # Build WHERE clause
             where_conditions = []
@@ -425,20 +490,14 @@ class DocumentRepositoryImpl(DocumentRepository):
                     "created_at": row[7]
                 })
             
-            return {
-                "total": total,
-                "page": page,
-                "page_size": page_size,
-                "total_pages": total_pages,
-                "events": events
-            }
-            
+                return {
+                    "total": total,
+                    "page": page,
+                    "page_size": page_size,
+                    "total_pages": total_pages,
+                    "events": events
+                }
         except Exception as e:
             logger.error(f"Error listing events: {str(e)}")
             raise Exception(f"Failed to list events: {str(e)}")
-        finally:
-            if cursor:
-                cursor.close()
-            if conn:
-                conn.close()
 
