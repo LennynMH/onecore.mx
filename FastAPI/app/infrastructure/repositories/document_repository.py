@@ -199,8 +199,27 @@ class DocumentRepositoryImpl(DocumentRepository):
             
             documents = []
             for row in cursor.fetchall():
+                document_id = row[0]
+                
+                # Get extracted data if exists
+                cursor.execute("""
+                    SELECT data_type, extracted_data
+                    FROM document_extracted_data
+                    WHERE document_id = ?
+                    ORDER BY created_at DESC
+                """, (document_id,))
+                
+                extracted_data = None
+                extracted_row = cursor.fetchone()
+                if extracted_row:
+                    try:
+                        extracted_data = json.loads(extracted_row[1])
+                    except (json.JSONDecodeError, TypeError) as e:
+                        logger.warning(f"Error parsing extracted_data for document {document_id}: {str(e)}")
+                        extracted_data = None
+                
                 documents.append(Document(
-                    id=row[0],
+                    id=document_id,
                     filename=row[1],
                     original_filename=row[2],
                     file_type=row[3],
@@ -210,7 +229,8 @@ class DocumentRepositoryImpl(DocumentRepository):
                     uploaded_by=row[7],
                     uploaded_at=row[8],
                     processed_at=row[9],
-                    file_size=row[10]
+                    file_size=row[10],
+                    extracted_data=extracted_data
                 ))
             
             return {
@@ -274,7 +294,7 @@ class DocumentRepositoryImpl(DocumentRepository):
             cursor = conn.cursor()
             
             cursor.execute("""
-                INSERT INTO events (event_type, description, document_id, user_id, created_at)
+                INSERT INTO log_events (event_type, description, document_id, user_id, created_at)
                 OUTPUT INSERTED.id, INSERTED.created_at
                 VALUES (?, ?, ?, ?, GETDATE())
             """, (
@@ -359,7 +379,7 @@ class DocumentRepositoryImpl(DocumentRepository):
             # Count total
             count_query = f"""
                 SELECT COUNT(*)
-                FROM events e
+                FROM log_events e
                 LEFT JOIN documents d ON e.document_id = d.id
                 WHERE {where_clause}
             """
@@ -381,7 +401,7 @@ class DocumentRepositoryImpl(DocumentRepository):
                     d.classification as document_classification,
                     e.user_id,
                     e.created_at
-                FROM events e
+                FROM log_events e
                 LEFT JOIN documents d ON e.document_id = d.id
                 WHERE {where_clause}
                 ORDER BY e.created_at DESC

@@ -62,10 +62,12 @@ const EventsHistory: React.FC = () => {
         params.append('description_search', filters.description_search);
       }
       if (filters.date_from) {
-        params.append('date_from', filters.date_from);
+        // Convertir fecha a datetime (inicio del día)
+        params.append('date_from', `${filters.date_from}T00:00:00`);
       }
       if (filters.date_to) {
-        params.append('date_to', filters.date_to);
+        // Convertir fecha a datetime (fin del día)
+        params.append('date_to', `${filters.date_to}T23:59:59`);
       }
 
       const response = await fetch(
@@ -124,10 +126,12 @@ const EventsHistory: React.FC = () => {
         params.append('description_search', filters.description_search);
       }
       if (filters.date_from) {
-        params.append('date_from', filters.date_from);
+        // Convertir fecha a datetime (inicio del día)
+        params.append('date_from', `${filters.date_from}T00:00:00`);
       }
       if (filters.date_to) {
-        params.append('date_to', filters.date_to);
+        // Convertir fecha a datetime (fin del día)
+        params.append('date_to', `${filters.date_to}T23:59:59`);
       }
 
       const url = `http://localhost:8000/api/v1/history/export?${params.toString()}`;

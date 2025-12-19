@@ -213,8 +213,9 @@ BEGIN
             (NEWID(), GETDATE(), GETDATE(), @admin_rol_id, 0),
             -- 2 usuarios con rol gestor
             (NEWID(), GETDATE(), GETDATE(), @gestor_rol_id, 0),
+            (NEWID(), GETDATE(), GETDATE(), @gestor_rol_id, 0),
             (NEWID(), GETDATE(), GETDATE(), @gestor_rol_id, 0);
-        
+
         PRINT '5 usuarios anónimos de ejemplo insertados exitosamente: 1 admin, 4 gestor';
     END
     ELSE
@@ -239,8 +240,8 @@ BEGIN
     
     INSERT INTO file_uploads (filename, s3_key, s3_bucket, uploaded_by, uploaded_at, row_count)
     VALUES (
-        'example_data.csv',
-        'uploads/2024/01/15/example_data.csv',
+        'example_data_test.csv',
+        'uploads/2024/01/15/example_data_test.csv',
         'onecore-uploads',
         999,
         GETDATE(),
@@ -313,24 +314,30 @@ BEGIN
 END
 GO
 
--- Tabla events: Registro de eventos para módulo histórico
-IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'events')
+-- Tabla log_events: Registro de eventos para módulo histórico
+IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'log_events' AND type = 'U')
 BEGIN
-    CREATE TABLE events (
-        id INT IDENTITY(1,1) PRIMARY KEY,
-        event_type NVARCHAR(50) NOT NULL, -- DOCUMENT_UPLOAD, AI_PROCESSING, USER_INTERACTION
-        description NVARCHAR(MAX),
-        document_id INT,
-        user_id INT,
-        created_at DATETIME2 DEFAULT GETDATE(),
-        FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE SET NULL,
-        FOREIGN KEY (user_id) REFERENCES anonymous_sessions(id) ON DELETE SET NULL
-    );
-    PRINT 'Tabla events creada exitosamente';
+    BEGIN TRY
+        CREATE TABLE log_events (
+            id INT IDENTITY(1,1) PRIMARY KEY,
+            event_type NVARCHAR(50) NOT NULL, -- DOCUMENT_UPLOAD, AI_PROCESSING, USER_INTERACTION
+            description NVARCHAR(MAX),
+            document_id INT,
+            user_id INT,
+            created_at DATETIME2 DEFAULT GETDATE(),
+            FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE SET NULL,
+            FOREIGN KEY (user_id) REFERENCES anonymous_sessions(id) ON DELETE NO ACTION
+        );
+        PRINT 'Tabla log_events creada exitosamente';
+    END TRY
+    BEGIN CATCH
+        PRINT 'Error al crear tabla log_events: ' + ERROR_MESSAGE();
+        THROW;
+    END CATCH
 END
 ELSE
 BEGIN
-    PRINT 'La tabla events ya existe';
+    PRINT 'La tabla log_events ya existe';
 END
 GO
 
@@ -370,25 +377,25 @@ BEGIN
     CREATE INDEX idx_document_extracted_data_data_type ON document_extracted_data (data_type);
 END
 
--- Índices en events
-IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'idx_events_type' AND object_id = OBJECT_ID('events'))
+-- Índices en log_events
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'idx_log_events_type' AND object_id = OBJECT_ID('log_events'))
 BEGIN
-    CREATE INDEX idx_events_type ON events (event_type);
+    CREATE INDEX idx_log_events_type ON log_events (event_type);
 END
 
-IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'idx_events_created_at' AND object_id = OBJECT_ID('events'))
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'idx_log_events_created_at' AND object_id = OBJECT_ID('log_events'))
 BEGIN
-    CREATE INDEX idx_events_created_at ON events (created_at);
+    CREATE INDEX idx_log_events_created_at ON log_events (created_at);
 END
 
-IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'idx_events_document_id' AND object_id = OBJECT_ID('events'))
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'idx_log_events_document_id' AND object_id = OBJECT_ID('log_events'))
 BEGIN
-    CREATE INDEX idx_events_document_id ON events (document_id);
+    CREATE INDEX idx_log_events_document_id ON log_events (document_id);
 END
 
-IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'idx_events_user_id' AND object_id = OBJECT_ID('events'))
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'idx_log_events_user_id' AND object_id = OBJECT_ID('log_events'))
 BEGIN
-    CREATE INDEX idx_events_user_id ON events (user_id);
+    CREATE INDEX idx_log_events_user_id ON log_events (user_id);
 END
 
 PRINT 'Índices para módulo de documentos creados exitosamente';
