@@ -1,4 +1,16 @@
-"""File upload use cases."""
+"""
+File upload use cases.
+
+Refactorización con Auto (Claude/ChatGPT) - PARTE 3.1
+
+¿Qué hace este módulo?
+Maneja la lógica de negocio para la carga y validación de archivos CSV,
+incluyendo subida a S3, validación de datos, y almacenamiento en base de datos.
+Esta refactorización utiliza CSVRowValidator para mejorar la modularidad.
+
+¿Qué clases contiene?
+- FileUploadUseCases: Casos de uso para carga de archivos CSV
+"""
 
 import csv
 import io
@@ -12,6 +24,7 @@ from app.domain.entities.file_upload import FileUpload
 from app.infrastructure.s3.s3_service import S3Service
 from app.domain.repositories.file_repository import FileRepository
 from app.core.config import settings
+from app.application.validators import CSVRowValidator
 
 logger = logging.getLogger(__name__)
 
@@ -61,16 +74,35 @@ class FileUploadUseCases:
         user_id: int
     ) -> Dict[str, Any]:
         """
-        Upload CSV file, validate it, and save to S3 and database.
+        Sube un archivo CSV, lo valida y lo guarda en S3 y base de datos.
         
-        Args:
-            file: CSV file to upload
-            param1: First additional parameter
-            param2: Second additional parameter
-            user_id: ID of user uploading the file
-            
-        Returns:
-            Dictionary with upload result and validation errors
+        ¿Qué hace la función?
+        Procesa un archivo CSV completo: lee el contenido, valida cada fila usando CSVRowValidator
+        (valores vacíos, tipos de datos, duplicados), genera un nombre único con timestamp,
+        intenta subirlo a S3 (opcional), y guarda los datos validados en la base de datos.
+        Retorna un diccionario con el resultado de la operación y todos los errores encontrados.
+        
+        ¿Qué parámetros recibe y de qué tipo?
+        - file (UploadFile): Archivo CSV a subir (FastAPI UploadFile)
+        - param1 (str): Primer parámetro adicional a agregar a cada fila
+        - param2 (str): Segundo parámetro adicional a agregar a cada fila
+        - user_id (int): ID del usuario que está subiendo el archivo
+        
+        ¿Qué dato regresa y de qué tipo?
+        - Dict[str, Any]: Diccionario con:
+          - success (bool): True si la operación fue exitosa
+          - message (str): Mensaje descriptivo del resultado
+          - filename (str): Nombre único del archivo con timestamp
+          - original_filename (str): Nombre original del archivo
+          - s3_key (str | None): Clave S3 si se subió exitosamente
+          - s3_bucket (str | None): Bucket S3 si se subió exitosamente
+          - rows_processed (int): Número de filas procesadas exitosamente
+          - validation_errors (List[Dict]): Lista de errores de validación encontrados
+          - param1 (str): Primer parámetro adicional
+          - param2 (str): Segundo parámetro adicional
+        
+        Raises:
+            Exception: Si ocurre un error durante el procesamiento del archivo
         """
         validation_errors = []
         
@@ -102,11 +134,11 @@ class FileUploadUseCases:
                 row_data['param1'] = param1
                 row_data['param2'] = param2
                 
-                # Validate row
-                row_errors = self._validate_row(row_data, row_number)
+                # Validate row using CSVRowValidator
+                row_errors = CSVRowValidator.validate_row(row_data, row_number)
                 
-                # Check for duplicates
-                duplicate_errors = self._check_duplicates(row_data, row_number, seen_rows)
+                # Check for duplicates using CSVRowValidator
+                duplicate_errors = CSVRowValidator.check_duplicates(row_data, row_number, seen_rows)
                 if duplicate_errors:
                     validation_errors.extend(duplicate_errors)
                 
@@ -187,161 +219,4 @@ class FileUploadUseCases:
                 "row": None
             })
             raise
-    
-    def _validate_row(self, row: Dict[str, Any], row_number: int) -> List[Dict[str, Any]]:
-        """
-        Validate a CSV row.
-        
-        Args:
-            row: Row data as dictionary
-            row_number: Row number for error reporting
-            
-        Returns:
-            List of validation errors
-        """
-        errors = []
-        
-        # Check for empty values
-        for key, value in row.items():
-            # Skip param1 and param2 as they are added by the system
-            if key in ['param1', 'param2']:
-                continue
-                
-            if value is None or (isinstance(value, str) and value.strip() == ""):
-                errors.append({
-                    "type": "empty_value",
-                    "field": key,
-                    "message": f"Empty value in field '{key}'",
-                    "row": row_number
-                })
-        
-        # Check for incorrect types
-        type_errors = self._validate_types(row, row_number)
-        if type_errors:
-            errors.extend(type_errors)
-        
-        return errors
-    
-    def _validate_types(self, row: Dict[str, Any], row_number: int) -> List[Dict[str, Any]]:
-        """
-        Validate data types in a CSV row.
-        
-        Args:
-            row: Row data as dictionary
-            row_number: Row number for error reporting
-            
-        Returns:
-            List of validation errors for incorrect types
-        """
-        errors = []
-        
-        for key, value in row.items():
-            # Skip param1 and param2 as they are added by the system
-            if key in ['param1', 'param2']:
-                continue
-            
-            if value is None or (isinstance(value, str) and value.strip() == ""):
-                continue  # Empty values are handled by _validate_row
-            
-            # Validate email format
-            if key.lower() in ['email', 'e-mail', 'correo']:
-                if not self._is_valid_email(value):
-                    errors.append({
-                        "type": "incorrect_type",
-                        "field": key,
-                        "message": f"Invalid email format in field '{key}': '{value}'",
-                        "row": row_number
-                    })
-            
-            # Validate numeric fields
-            elif key.lower() in ['age', 'edad', 'id', 'number', 'numero', 'count', 'cantidad']:
-                if not self._is_valid_number(value):
-                    errors.append({
-                        "type": "incorrect_type",
-                        "field": key,
-                        "message": f"Invalid number format in field '{key}': '{value}'",
-                        "row": row_number
-                    })
-            
-            # Validate date fields
-            elif key.lower() in ['date', 'fecha', 'birthdate', 'fecha_nacimiento', 'created_at', 'updated_at']:
-                if not self._is_valid_date(value):
-                    errors.append({
-                        "type": "incorrect_type",
-                        "field": key,
-                        "message": f"Invalid date format in field '{key}': '{value}'",
-                        "row": row_number
-                    })
-        
-        return errors
-    
-    def _check_duplicates(self, row: Dict[str, Any], row_number: int, seen_rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """
-        Check for duplicate rows.
-        
-        Args:
-            row: Current row data
-            row_number: Current row number
-            seen_rows: List of previously seen rows
-            
-        Returns:
-            List of validation errors for duplicates
-        """
-        errors = []
-        
-        # Create a copy of row without param1 and param2 for comparison
-        row_for_comparison = {k: v for k, v in row.items() if k not in ['param1', 'param2']}
-        
-        # Check if this row is a duplicate
-        for idx, seen_row in enumerate(seen_rows):
-            seen_row_for_comparison = {k: v for k, v in seen_row.items() if k not in ['param1', 'param2']}
-            
-            if row_for_comparison == seen_row_for_comparison:
-                errors.append({
-                    "type": "duplicate",
-                    "field": None,
-                    "message": f"Duplicate row detected. Row {row_number} is identical to row {idx + 1}",
-                    "row": row_number
-                })
-                break  # Solo reportar el primer duplicado encontrado
-        
-        return errors
-    
-    @staticmethod
-    def _is_valid_email(value: str) -> bool:
-        """Check if value is a valid email format."""
-        import re
-        email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-        return bool(re.match(email_pattern, str(value).strip()))
-    
-    @staticmethod
-    def _is_valid_number(value: Any) -> bool:
-        """Check if value is a valid number."""
-        try:
-            float(str(value).strip())
-            return True
-        except (ValueError, TypeError):
-            return False
-    
-    @staticmethod
-    def _is_valid_date(value: Any) -> bool:
-        """Check if value is a valid date format."""
-        from datetime import datetime
-        date_formats = [
-            '%Y-%m-%d',
-            '%d/%m/%Y',
-            '%m/%d/%Y',
-            '%Y-%m-%d %H:%M:%S',
-            '%d-%m-%Y',
-            '%Y/%m/%d'
-        ]
-        
-        value_str = str(value).strip()
-        for fmt in date_formats:
-            try:
-                datetime.strptime(value_str, fmt)
-                return True
-            except (ValueError, TypeError):
-                continue
-        return False
 
