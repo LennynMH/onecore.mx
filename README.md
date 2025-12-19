@@ -571,11 +571,22 @@ Accede a http://localhost:8000/docs para probar los endpoints interactivamente.
 | POST | `/api/v1/auth/login` | Iniciar sesión (obtener JWT) | No |
 | POST | `/api/v1/auth/renew` | Renovar token JWT | Sí |
 
+**Características:**
+- ✅ Soporte para múltiples roles (admin, gestor)
+- ✅ Token JWT con expiración de 15 minutos
+- ✅ Renovación de token con validación de expiración
+- ✅ Token incluye `id_usuario` y `rol`
+
 ### Archivos
 
 | Método | Endpoint | Descripción | Autenticación |
 |--------|----------|-------------|---------------|
-| POST | `/api/v1/files/upload` | Subir archivo CSV | Sí (rol: admin) |
+| POST | `/api/v1/files/upload` | Subir archivo CSV con validación | Sí (rol: admin, gestor) |
+
+**Características:**
+- ✅ Validación completa (valores vacíos, tipos, duplicados)
+- ✅ Tracking de errores en tabla dedicada
+- ✅ Soporte para múltiples roles (configurable en `FILE_UPLOAD_REQUIRED_ROLES`)
 
 ### Health Check
 
@@ -584,19 +595,43 @@ Accede a http://localhost:8000/docs para probar los endpoints interactivamente.
 | GET | `/health` | Estado de la API | No |
 | GET | `/` | Información de la API | No |
 
-### Documentos
+### Documentos (FASE 1-3 COMPLETA)
 
 | Método | Endpoint | Descripción | Autenticación |
 |--------|----------|-------------|---------------|
-| POST | `/api/v1/documents/upload` | Subir documento (PDF/JPG/PNG) | Sí (rol: admin) |
-| GET | `/api/v1/documents` | Listar documentos con filtros | Sí (rol: admin) |
-| GET | `/api/v1/documents/{id}` | Obtener documento por ID | Sí (rol: admin) |
+| POST | `/api/v1/documents/upload` | Subir documento (PDF/JPG/PNG) con clasificación y extracción automática | Sí (rol: admin, gestor) |
+| GET | `/api/v1/documents` | Listar documentos con filtros avanzados | Sí (rol: admin, gestor) |
+| GET | `/api/v1/documents/{id}` | Obtener documento por ID con datos extraídos | Sí (rol: admin, gestor) |
 
-**Características:**
+**Características FASE 1:**
 - ✅ Subida a AWS S3 y Base de Datos
-- ✅ Nombres únicos con timestamp
+- ✅ Nombres únicos con timestamp (`_ddmmyyyyhhmmss`)
 - ✅ Filtros por clasificación y rango de fechas
 - ✅ Paginación
+
+**Características FASE 2 (Clasificación Automática):**
+- ✅ Clasificación automática con AWS Textract (FACTURA/INFORMACIÓN)
+- ✅ Sistema de keywords con pesos para precisión
+- ✅ Normalización de texto para mejor matching
+
+**Características FASE 3 (Extracción de Datos):**
+- ✅ **Para FACTURAS:** Extracción de Cliente, Proveedor, Número de Factura, Productos (cantidad, nombre, precio, total), Totales
+- ✅ **Para INFORMACIÓN:** Extracción de Descripción, Resumen, Análisis de Sentimiento (OpenAI)
+- ✅ Datos estructurados guardados en `document_extracted_data`
+- ✅ Integración con AWS Textract (FORMS y TABLES) y OpenAI
+
+### Historial (FASE 4 COMPLETA)
+
+| Método | Endpoint | Descripción | Autenticación |
+|--------|----------|-------------|---------------|
+| GET | `/api/v1/history` | Listar eventos con filtros avanzados y paginación | Sí |
+| GET | `/api/v1/history/export` | Exportar historial a Excel (.xlsx) | Sí |
+
+**Características:**
+- ✅ Filtros avanzados: tipo de evento, documento, usuario, clasificación, rango de fechas, búsqueda en descripción
+- ✅ Paginación configurable (default: 50 items por página)
+- ✅ Exportación a Excel con opción de incluir/excluir detalles del documento
+- ✅ Registro automático de eventos en cada operación (upload, clasificación, extracción)
 - ✅ Registro de eventos automático
 - ✅ Clasificación automática (FASE 2 - COMPLETA)
 - ✅ Extracción de datos (FASE 3 - COMPLETA)
@@ -743,6 +778,31 @@ npm run dev
 npm run build
 ```
 
+### Pruebas Unitarias
+
+El proyecto incluye **70 pruebas unitarias** implementadas con Pytest, cubriendo todos los casos de uso principales.
+
+**Ejecutar pruebas:**
+```bash
+# Desde Docker
+docker exec onecore_api_dev python -m pytest tests/ -v
+
+# Localmente
+cd FastAPI
+pytest tests/ -v
+```
+
+**Ver documentación completa:**
+- Ver `FastAPI/tests/README.md` para detalles completos sobre estructura, ejecución y cobertura de pruebas.
+
+**Resumen de pruebas:**
+- ✅ **AuthUseCases**: 20 casos (login_anonymous_user: 10, renew_token: 10)
+- ✅ **FileUploadUseCases**: 14 casos (upload_and_validate_file: 14)
+- ✅ **DocumentUploadUseCases**: 14 casos (upload_document: 14)
+- ✅ **HistoryUseCases**: 22 casos (get_history: 12, export_to_excel: 10)
+
+**Total: 70 pruebas unitarias** ✅
+
 ---
 
 ## 🚀 Producción
@@ -832,6 +892,10 @@ docker-compose -f docker-compose.production.yml up -d
 - [x] Logging estructurado
 - [x] Documentación Swagger/OpenAPI
 - [x] Colección Postman completa con tests automatizados
+- [x] **PARTE 3: USO DE IA Y REFACTORIZACIÓN DE CÓDIGO (EVALUACION_TECNICA_V3.txt)**
+  - [x] **3.1 Refactorización Dinámica:** Arquitectura modular con controllers, helpers y separación de responsabilidades
+  - [x] **3.2 Documentación Generada con IA:** Documentación completa de todas las funciones
+  - [x] **3.3 Pruebas Unitarias:** 70 pruebas con Pytest (10+ casos por método)
 
 ### 🚧 En Desarrollo / Planificado
 
@@ -873,6 +937,22 @@ docker-compose -f docker-compose.production.yml up -d
 - [x] Exportación a Excel (.xlsx)
 - [x] Paginación y ordenamiento
 - [x] Registro automático de eventos
+
+### ✅ PARTE 3: USO DE IA Y REFACTORIZACIÓN DE CÓDIGO - COMPLETA
+- [x] **3.1 Refactorización Dinámica:**
+  - Arquitectura modular con controllers y routers
+  - Clases helper (DatabaseHelper, FileUtils, DocumentProcessor, ExcelExporter, InvoiceParser, HTTPHelpers)
+  - Separación de responsabilidades mejorada
+  - Eliminación de código duplicado
+- [x] **3.2 Documentación Generada con IA:**
+  - Documentación completa de todas las funciones
+  - Descripción de qué hace, parámetros y retorno
+  - Formato estandarizado en todos los módulos
+- [x] **3.3 Pruebas Unitarias:**
+  - 70 pruebas unitarias con Pytest
+  - 10+ casos de prueba por método
+  - Cobertura completa de casos de uso principales
+  - Fixtures y mocks para aislamiento
 
 ---
 
