@@ -3,6 +3,7 @@
  */
 
 import axios, { AxiosInstance, AxiosError } from 'axios';
+import { isTokenExpired } from '../utils/jwt';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -93,6 +94,13 @@ class APIService {
     this.api.interceptors.request.use((config) => {
       const token = this.getToken();
       if (token) {
+        // Verificar si el token está expirado antes de agregarlo
+        if (isTokenExpired(token)) {
+          // Token expirado, limpiar y redirigir
+          this.logout();
+          window.location.href = '/login';
+          return Promise.reject(new Error('Token expirado'));
+        }
         config.headers.Authorization = `Bearer ${token}`;
       }
       return config;
@@ -198,9 +206,22 @@ class APIService {
 
   /**
    * Verificar si el usuario está autenticado
+   * Verifica que exista el token Y que no esté expirado
    */
   isAuthenticated(): boolean {
-    return !!this.getToken();
+    const token = this.getToken();
+    if (!token) {
+      return false;
+    }
+
+    // Verificar si el token está expirado
+    if (isTokenExpired(token)) {
+      // Token expirado, limpiar y retornar false
+      this.logout();
+      return false;
+    }
+
+    return true;
   }
 
   /**
